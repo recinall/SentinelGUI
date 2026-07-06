@@ -23,8 +23,8 @@ import numpy as np
 import pytest
 from PIL import Image
 
-import sentinelgui.create_overlay as co
-from sentinelgui.create_overlay import create_overlay, hex_to_rgba
+import sentinelgui.core.overlay as co
+from sentinelgui.core.overlay import create_overlay, hex_to_rgba
 
 # --------------------------------------------------------------------------- #
 # Shared monkeypatch helpers
@@ -125,6 +125,30 @@ def test_gradient_mode_no_rgb_produces_expected_rgba(monkeypatch):
         dtype=np.uint8,
     )
     np.testing.assert_array_equal(saved[0].array, expected)
+
+
+def test_progress_callback_emits_expected_milestones(monkeypatch):
+    """Freeze the exact milestone lines emitted on the success path (no-rgb run)
+    so the injected-callback contract cannot drift silently.
+    """
+    _capture_save(monkeypatch)
+    index_arr = np.array([[0, 100], [200, 255]], dtype=np.uint8)
+    index_img = Image.fromarray(index_arr, "L")
+    _patch_open_sequence(monkeypatch, [index_img])
+
+    messages: list[str] = []
+    create_overlay(
+        None, "fake_index.png", "fake_out.tif",
+        [0.0, 100.0], ["#000000", "#ffffff"], 0.7, 10.0, "gradient",
+        progress=messages.append,
+    )
+
+    assert messages == [
+        "Loaded index image",
+        "Computed percentile levels",
+        "Built overlay image",
+        "Saving overlay to fake_out.tif",
+    ]
 
 
 def test_gradient_degenerate_vmin_gte_vmax_uses_single_color(monkeypatch):
