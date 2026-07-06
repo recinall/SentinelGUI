@@ -72,6 +72,14 @@ def test_view_menu_toggles_theme(app, window):
     action = window.dark_mode_action
     assert action.isCheckable()
 
+    # Drive the slot directly so the assertions don't depend on the persisted start mode.
+    window.toggle_theme(True)
+    assert DARK.surface in app.styleSheet()
+    window.toggle_theme(False)
+    assert LIGHT.surface in app.styleSheet()
+
+    # The menu action is wired to the same slot: toggling it flips the applied theme.
+    action.setChecked(False)  # normalize to a known baseline before asserting transitions
     action.setChecked(True)
     assert DARK.surface in app.styleSheet()
     action.setChecked(False)

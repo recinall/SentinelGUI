@@ -7,23 +7,21 @@ with no real display and no windows are ever shown.
 """
 
 import os
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-os.environ.setdefault("MPLBACKEND", "Agg")
+import tempfile
 
 import pytest
 
+# None of the imports above pull in PySide6/matplotlib, so the environment below is still
+# set before the first Qt import (which only happens inside the fixtures/tests).
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+os.environ.setdefault("MPLBACKEND", "Agg")
 
-@pytest.fixture(scope="session", autouse=True)
-def _isolate_qsettings(tmp_path_factory):
-    """Redirect QSettings to a throwaway dir so theme-persistence tests never touch
-    the developer's real ``~/.config``."""
-    from PySide6.QtCore import QSettings
-
-    path = str(tmp_path_factory.mktemp("qsettings"))
-    QSettings.setDefaultFormat(QSettings.IniFormat)
-    QSettings.setPath(QSettings.IniFormat, QSettings.UserScope, path)
-    yield
+# Redirect the platform config dir to a throwaway location *before* any Qt import, so the
+# native ``QSettings(org, app)`` the theme uses never touches the developer's real config
+# (theme-persistence tests would otherwise leak a saved mode into ``~/.config``).
+_SETTINGS_DIR = tempfile.mkdtemp(prefix="sentinelgui-test-settings-")
+os.environ["XDG_CONFIG_HOME"] = _SETTINGS_DIR  # Linux/CI
+os.environ["APPDATA"] = _SETTINGS_DIR  # Windows fallback
 
 
 @pytest.fixture(scope="session")

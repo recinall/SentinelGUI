@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QSize, Qt
 from PySide6.QtWidgets import (
     QApplication,
     QGroupBox,
@@ -24,6 +24,7 @@ from sentinelgui.ui.tabs.aoi_tab import AoiTab
 from sentinelgui.ui.tabs.output_tab import OutputTab
 from sentinelgui.ui.tabs.processing_tab import ProcessingTab
 from sentinelgui.ui.tabs.search_tab import SearchTab
+from sentinelgui.ui.theme.icons import render_icon
 from sentinelgui.ui.widgets.log_panel import LogPanel
 from sentinelgui.ui.widgets.scene_table import SceneTable
 from sentinelgui.workers.basemap import BasemapWorker
@@ -72,21 +73,29 @@ class Sentinel2GUI(QMainWindow):
         top_layout.addWidget(tab_widget)
         
         btn_layout = QHBoxLayout()
-        
-        self.search_btn = QPushButton("🔍 Search Scenes")
+
+        self.search_btn = QPushButton("Search Scenes")
         self.search_btn.clicked.connect(self.search_scenes)
         self.search_btn.setMinimumHeight(40)
-        
-        self.basemap_btn = QPushButton("🗺️ Download Basemap")
+
+        self.basemap_btn = QPushButton("Download Basemap")
         self.basemap_btn.clicked.connect(self.download_basemap)
         self.basemap_btn.setMinimumHeight(40)
         self.basemap_btn.setObjectName("accent")
-        
-        self.process_btn = QPushButton("⚙️ Process Selected Scene")
+
+        self.process_btn = QPushButton("Process Selected Scene")
         self.process_btn.clicked.connect(self.process_scene)
         self.process_btn.setEnabled(False)
         self.process_btn.setMinimumHeight(40)
-        
+
+        # (button, icon name, palette role for the icon color)
+        self._icon_buttons = [
+            (self.search_btn, "search", "on_surface"),
+            (self.basemap_btn, "basemap", "on_primary"),
+            (self.process_btn, "process", "on_surface"),
+        ]
+        self._refresh_icons()
+
         btn_layout.addWidget(self.search_btn)
         btn_layout.addWidget(self.basemap_btn)
         btn_layout.addWidget(self.process_btn)
@@ -132,6 +141,13 @@ class Sentinel2GUI(QMainWindow):
 
     def toggle_theme(self, checked):
         theme.load_theme(QApplication.instance(), "dark" if checked else "light")
+        self._refresh_icons()
+
+    def _refresh_icons(self):
+        palette = theme.PALETTES[theme.current_mode()]
+        for button, name, role in self._icon_buttons:
+            button.setIcon(render_icon(name, getattr(palette, role)))
+            button.setIconSize(QSize(18, 18))
 
     def log(self, message):
         self.log_panel.log(message)
