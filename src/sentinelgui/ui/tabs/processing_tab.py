@@ -161,6 +161,7 @@ class ProcessingTab(QScrollArea):
 
         self.save_bands_cb = QCheckBox("Save Individual Bands")
         self.save_bands_cb.setToolTip("Save each band as a separate GeoTIFF file")
+        self.save_bands_cb.toggled.connect(self._on_save_bands_toggled)
 
         self.rgb_cb = QCheckBox("Create RGB Composite (B04, B03, B02)")
         self.rgb_cb.setToolTip("Generate a true color composite image")
@@ -174,6 +175,17 @@ class ProcessingTab(QScrollArea):
         layout.addWidget(ref_band_group)
         layout.addWidget(options_group)
         layout.addStretch()
+
+    def _on_save_bands_toggled(self, checked: bool):
+        """Mirror the Save-Individual-Bands toggle onto every band checkbox.
+
+        The controller only saves bands present in ``bands_to_load``, which it composes
+        from the selected indices, :meth:`selected_bands` and the RGB triple. Ticking
+        "Save Individual Bands" on its own would otherwise leave that set empty and save
+        nothing, so we (un)check all twelve band checkboxes to match the toggle.
+        """
+        for cb in self.band_checkboxes.values():
+            cb.setChecked(checked)
 
     def select_all_indices(self):
         for cb in self.index_checkboxes.values():

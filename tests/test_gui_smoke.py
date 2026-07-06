@@ -198,6 +198,21 @@ def test_index_checkboxes_and_select_clear(window):
     assert tab.selected_algorithms() == []
 
 
+def test_save_bands_toggle_selects_all_band_checkboxes(window):
+    # Ticking "Save Individual Bands" must auto-check every band so the controller's
+    # bands_to_load is non-empty and the bands actually get saved (regression: Bug 2).
+    tab = window.processing_tab
+    assert tab.selected_bands() == set()
+
+    tab.save_bands_cb.setChecked(True)
+    assert all(cb.isChecked() for cb in tab.band_checkboxes.values())
+    assert tab.selected_bands() == set(Sentinel2COGProcessor.BAND_MAPPING)
+
+    tab.save_bands_cb.setChecked(False)
+    assert not any(cb.isChecked() for cb in tab.band_checkboxes.values())
+    assert tab.selected_bands() == set()
+
+
 # -- Output tab --
 
 
