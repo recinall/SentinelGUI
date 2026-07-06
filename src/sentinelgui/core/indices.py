@@ -30,6 +30,24 @@ BAND_MAPPING = {
     'b12': 'swir22',
 }
 
+# Native ground sampling distance (metres) of each Sentinel-2 L2A band. Used to pick the
+# finest-resolution band as the resampling reference grid when the user leaves the reference
+# on "Auto". Keys mirror ``BAND_MAPPING`` exactly (note the ``b08a`` narrow-NIR key).
+BAND_RESOLUTION = {
+    'b01': 60,
+    'b02': 10,
+    'b03': 10,
+    'b04': 10,
+    'b05': 20,
+    'b06': 20,
+    'b07': 20,
+    'b08': 10,
+    'b08a': 20,
+    'b09': 60,
+    'b11': 20,
+    'b12': 20,
+}
+
 ALGORITHMS = {
     'NDVI': {'bands': ['b04', 'b08'], 'formula': lambda r, n: (n - r) / (n + r)},
     'NDSI': {'bands': ['b08', 'b11'], 'formula': lambda n, s: (s - n) / (s + n)},

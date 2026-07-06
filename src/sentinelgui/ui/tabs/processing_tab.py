@@ -149,7 +149,7 @@ class ProcessingTab(QScrollArea):
         ref_band_layout.addWidget(ref_info)
 
         self.ref_band_combo = QComboBox()
-        self.ref_band_combo.addItem("Auto (first loaded band)", None)
+        self.ref_band_combo.addItem("Auto (highest resolution)", None)
         for band_key, band_name in Sentinel2COGProcessor.BAND_MAPPING.items():
             self.ref_band_combo.addItem(f"{band_key.upper()} - {band_name}", band_key)
 

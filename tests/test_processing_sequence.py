@@ -298,6 +298,79 @@ def test_process_task_via_worker_uses_dataclass_defaults(monkeypatch):
     assert scene_found_calls == []
 
 
+def _make_processor_with_bands(bands):
+    """Like ``_make_processor`` but with ``get_scene_assets`` returning URLs for an
+    arbitrary set of bands, so the Auto reference-selection can be exercised across
+    mixed native resolutions."""
+    fake_profile = {
+        "driver": "GTiff",
+        "dtype": "float32",
+        "width": 4,
+        "height": 3,
+        "count": 1,
+        "crs": "EPSG:4326",
+        "transform": "IDENTITY",
+    }
+
+    processor = Sentinel2COGProcessor(
+        {"bbox": [11.0, 46.0, 11.5, 46.5]}, "2024-06-01", "2024-06-30"
+    )
+
+    processor.get_scene_assets = lambda scene_index: {
+        b: f"https://example.test/{b}.tif" for b in bands
+    }
+    processor.load_band_window = lambda cog_url, bbox, reference_profile=None: (
+        np.zeros((3, 4), dtype=np.float32),
+        fake_profile,
+    )
+    processor.save_raster = lambda *a, **k: None
+    processor.calculate_index = lambda algorithm, bands: np.zeros((3, 4), dtype=np.float32)
+
+    return processor
+
+
+def _reference_band(bands, ref_band):
+    """Run process_scene over ``bands`` and return the band named in the sole
+    "Using <band> as reference" progress line."""
+    processor = _make_processor_with_bands(bands)
+    msgs = []
+    processor.process_scene(
+        ProcessingParams(
+            scene_index=0,
+            bbox=(11.0, 46.0, 11.5, 46.5),
+            bands_to_load=set(bands),
+            output="/tmp/out",
+            algorithms=[],
+            save_bands=False,
+            rgb=False,
+            bit_depth=16,
+            ref_band=ref_band,
+        ),
+        progress=msgs.append,
+    )
+    reference_msgs = [m for m in msgs if m.startswith("  Using")]
+    assert len(reference_msgs) == 1
+    # "  Using b08 as reference (4x3 pixels)" -> "b08"
+    return reference_msgs[0].split()[1]
+
+
+def test_auto_reference_picks_finest_resolution_band():
+    # b05 is 20 m and alphabetically first; b08 is 10 m. Auto must pick the finer b08
+    # as the reference grid, NOT the alphabetical b05.
+    assert _reference_band(["b05", "b08"], ref_band=None) == "b08"
+
+
+def test_auto_reference_tiebreak_by_name_matches_old_behaviour():
+    # b04 and b08 are both 10 m; the deterministic name tie-break keeps the
+    # alphabetical-first band (b04), identical to the pre-change behaviour.
+    assert _reference_band(["b04", "b08"], ref_band=None) == "b04"
+
+
+def test_explicit_reference_band_still_honoured():
+    # An explicit ref_band overrides Auto entirely, even when it is the coarser band.
+    assert _reference_band(["b05", "b08"], ref_band="b05") == "b05"
+
+
 def test_search_task_emits_expected_sequence_and_payloads():
     processor = FakeProcessor()
 

@@ -30,7 +30,7 @@ from rasterio.warp import (
 )
 from shapely.geometry import shape
 
-from sentinelgui.core.indices import ALGORITHMS, BAND_MAPPING
+from sentinelgui.core.indices import ALGORITHMS, BAND_MAPPING, BAND_RESOLUTION
 from sentinelgui.core.models import ProcessingParams
 
 
@@ -424,6 +424,13 @@ class Sentinel2COGProcessor:
         if ref_band and ref_band in bands_to_load:
             bands_order.remove(ref_band)
             bands_order.insert(0, ref_band)
+        elif ref_band is None and bands_order:
+            # "Auto": use the finest-resolution band as the reference grid, so indices are
+            # computed on the finest available grid. Tie-break by name keeps equal-resolution
+            # sets identical to the old alphabetical-first behaviour.
+            auto_ref = min(bands_order, key=lambda b: (BAND_RESOLUTION.get(b, 999), b))
+            bands_order.remove(auto_ref)
+            bands_order.insert(0, auto_ref)
 
         total_steps = len(bands_order) + len(algorithms) + (1 if rgb else 0)
         current_step = 0

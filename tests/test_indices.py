@@ -10,6 +10,7 @@ pure numpy math and needs no display either.
 
 import numpy as np
 
+from sentinelgui.core.indices import BAND_MAPPING, BAND_RESOLUTION
 from sentinelgui.core.processor import Sentinel2COGProcessor
 
 DUMMY_AOI = {"bbox": [11.0, 46.0, 11.5, 46.5]}
@@ -111,3 +112,20 @@ def test_calculate_index_raises_for_missing_band():
         pass
     else:
         raise AssertionError("Expected ValueError for missing required band")
+
+
+def test_band_resolution_keys_mirror_band_mapping():
+    # The resolution map must cover exactly the same band keys as BAND_MAPPING,
+    # including the narrow-NIR "b08a" key, so the Auto reference selection can look
+    # up every loadable band.
+    assert set(BAND_RESOLUTION) == set(BAND_MAPPING)
+
+
+def test_band_resolution_tiers_match_sentinel2_native_gsd():
+    tier_10m = {"b02", "b03", "b04", "b08"}
+    tier_20m = {"b05", "b06", "b07", "b08a", "b11", "b12"}
+    tier_60m = {"b01", "b09"}
+
+    assert {b for b, m in BAND_RESOLUTION.items() if m == 10} == tier_10m
+    assert {b for b, m in BAND_RESOLUTION.items() if m == 20} == tier_20m
+    assert {b for b, m in BAND_RESOLUTION.items() if m == 60} == tier_60m
