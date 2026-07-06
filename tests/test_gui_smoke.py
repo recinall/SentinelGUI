@@ -108,6 +108,25 @@ def test_aoi_accepts_dms_in_bbox_field(window):
     assert aoi["bbox"] == [10.5, 46.0, 11.5, 46.5]
 
 
+def test_aoi_defaults_to_bbox_mode(window):
+    assert window.aoi_tab.bbox_radio.isChecked()
+    assert not window.aoi_tab.center_radio.isChecked()
+
+
+def test_aoi_center_window_mode_computes_bbox(window):
+    tab = window.aoi_tab
+    tab.center_radio.setChecked(True)
+    tab.center_lat.setText("0")
+    tab.center_lon.setText("0")
+    tab.width_km.setText("222.64")
+    tab.height_km.setText("221.148")
+    min_lon, min_lat, max_lon, max_lat = tab.get_aoi()["bbox"]
+    assert min_lon == pytest.approx(-1.0)
+    assert max_lon == pytest.approx(1.0)
+    assert min_lat == pytest.approx(-1.0)
+    assert max_lat == pytest.approx(1.0)
+
+
 # -- Search tab --
 
 
