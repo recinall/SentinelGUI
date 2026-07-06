@@ -1,0 +1,170 @@
+"""Characterization tests for the GUI-observable progress sequence produced by the
+inline ``ProcessingThread`` in ``sentinelgui.sentinel_gui`` (both the "search" and
+"process" branches of ``run()``).
+
+``ProcessingThread`` is a ``QThread`` subclass, but it is exercised here by calling
+``.run()`` directly and SYNCHRONOUSLY (never ``.start()``), so nothing is offloaded
+to a real worker thread and no Qt event loop is required. The offscreen platform is
+set process-wide by ``tests/conftest.py``, which is what makes importing
+``sentinel_gui`` (a module-scope ``PySide6`` import) safe here.
+
+The processor is fully faked (no network, no rasterio reads) via a plain class with
+canned return values, so this file exercises only ``ProcessingThread.run()`` itself.
+The only real I/O boundary left inside ``run()`` for the RGB branch is an inline
+``rasterio.open(path, 'w', **profile)`` write, which is monkeypatched to a
+context-manager stub so nothing touches disk.
+
+This is a pixel-for-pixel snapshot of the *exact* ordered progress strings and the
+finished/scene_found payloads as they exist today, so a future extraction of this
+logic into ``core/`` (wrapped by a real ``workers/processing.py``) can be checked
+against it without behavior drift.
+"""
+
+import numpy as np
+import rasterio
+
+from sentinelgui.sentinel_gui import ProcessingThread
+
+
+class FakeProcessor:
+    """Canned stand-in for Sentinel2COGProcessor: no network, no rasterio reads."""
+
+    def __init__(self):
+        self.band_urls = {"b04": "https://example.test/b04.tif", "b08": "https://example.test/b08.tif"}
+        self.fake_profile = {
+            "driver": "GTiff",
+            "dtype": "float32",
+            "width": 4,
+            "height": 3,
+            "count": 1,
+            "crs": "EPSG:4326",
+            "transform": "IDENTITY",
+        }
+        self.save_raster_calls = []
+
+    # -- "search" task type --
+    def search_scenes(self):
+        return [{"id": "scene-0"}, {"id": "scene-1"}]
+
+    # -- "process" task type --
+    def get_scene_assets(self, scene_index):
+        assert scene_index == 0
+        return self.band_urls
+
+    def load_band_window(self, cog_url, bbox, reference_profile=None):
+        return np.zeros((3, 4), dtype=np.float32), self.fake_profile
+
+    def save_raster(self, data, profile, output_path, bit_depth=8, scale_range=None):
+        self.save_raster_calls.append((output_path, bit_depth, scale_range))
+
+    def calculate_index(self, algorithm, bands):
+        return np.zeros((3, 4), dtype=np.float32)
+
+    def create_rgb_composite(self, bands):
+        return np.zeros((3, 3, 4), dtype=np.float32)
+
+
+class _FakeRasterioDataset:
+    def write(self, data):
+        pass
+
+
+class _FakeRasterioOpen:
+    """Context-manager stand-in for rasterio.open(path, 'w', **profile)."""
+
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def __enter__(self):
+        return _FakeRasterioDataset()
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        return False
+
+
+def _run_thread(processor, task_type, params):
+    thread = ProcessingThread(processor, task_type, params)
+
+    progress_msgs = []
+    finished_calls = []
+    scene_found_calls = []
+
+    thread.progress.connect(progress_msgs.append)
+    thread.finished.connect(lambda ok, msg: finished_calls.append((ok, msg)))
+    thread.scene_found.connect(scene_found_calls.append)
+
+    thread.run()
+
+    return progress_msgs, finished_calls, scene_found_calls
+
+
+def test_process_task_emits_exact_progress_sequence(monkeypatch):
+    monkeypatch.setattr(rasterio, "open", _FakeRasterioOpen)
+
+    processor = FakeProcessor()
+    params = {
+        "scene_index": 0,
+        "bbox": (11.0, 46.0, 11.5, 46.5),
+        "bands_to_load": {"b04", "b08"},
+        "output": "/tmp/out",
+        "algorithms": ["NDVI"],
+        "save_bands": True,
+        "rgb": True,
+        "bit_depth": 16,
+        "ref_band": "b04",
+    }
+
+    progress_msgs, finished_calls, scene_found_calls = _run_thread(processor, "process", params)
+
+    assert progress_msgs == [
+        "Processing scene 0...",
+        "[1/4] Loading b04...",
+        "  Using b04 as reference (4x3 pixels)",
+        "  Saved: /tmp/out_band_b04.tif",
+        "[2/4] Loading b08...",
+        "  Saved: /tmp/out_band_b08.tif",
+        "[3/4] Calculating NDVI...",
+        "  Saved: /tmp/out_ndvi.tif",
+        "[4/4] Creating RGB composite...",
+        "  Saved: /tmp/out_rgb.tif",
+    ]
+
+    assert finished_calls == [
+        (True, "Processing complete! Generated 1 indices, 2 bands, 1 RGB composite")
+    ]
+    assert scene_found_calls == []
+
+
+def test_process_task_reference_profile_only_reported_once():
+    # The "Using <band> as reference" message only fires on the FIRST band loaded
+    # (whichever establishes reference_profile); the second band load must not
+    # repeat it, which the exact-sequence assertion above already proves, but this
+    # test isolates that single fact for clarity/robustness against reordering.
+    processor = FakeProcessor()
+    params = {
+        "scene_index": 0,
+        "bbox": (11.0, 46.0, 11.5, 46.5),
+        "bands_to_load": {"b04", "b08"},
+        "output": "/tmp/out",
+        "algorithms": [],
+        "save_bands": False,
+        "rgb": False,
+        "bit_depth": 16,
+        "ref_band": "b04",
+    }
+
+    progress_msgs, finished_calls, _ = _run_thread(processor, "process", params)
+
+    reference_msgs = [m for m in progress_msgs if m.startswith("  Using")]
+    assert reference_msgs == ["  Using b04 as reference (4x3 pixels)"]
+    assert finished_calls == [(True, "Processing complete! Generated 0 indices")]
+
+
+def test_search_task_emits_expected_sequence_and_payloads():
+    processor = FakeProcessor()
+
+    progress_msgs, finished_calls, scene_found_calls = _run_thread(processor, "search", {})
+
+    assert progress_msgs == ["Searching for scenes..."]
+    assert finished_calls == [(True, "Found 2 scenes")]
+    assert scene_found_calls == [[{"id": "scene-0"}, {"id": "scene-1"}]]
