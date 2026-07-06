@@ -101,6 +101,13 @@ def test_default_aoi(window):
     assert window.aoi_tab.get_aoi() == {"bbox": [11.0, 46.0, 11.5, 46.5]}
 
 
+def test_aoi_accepts_dms_in_bbox_field(window):
+    # 10°30'00" == 10.5; the other three stay decimal.
+    window.aoi_tab.min_lon.setText("10°30'00\"")
+    aoi = window.aoi_tab.get_aoi()
+    assert aoi["bbox"] == [10.5, 46.0, 11.5, 46.5]
+
+
 # -- Search tab --
 
 

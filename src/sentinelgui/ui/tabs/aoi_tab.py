@@ -20,6 +20,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from sentinelgui.core.geo import parse_coordinate
+
 
 class AoiTab(QWidget):
     def __init__(self, parent=None):
@@ -98,10 +100,10 @@ class AoiTab(QWidget):
                 return json.load(f)
         else:
             try:
-                min_lon = float(self.min_lon.text().replace(",", "."))
-                min_lat = float(self.min_lat.text().replace(",", "."))
-                max_lon = float(self.max_lon.text().replace(",", "."))
-                max_lat = float(self.max_lat.text().replace(",", "."))
+                min_lon = parse_coordinate(self.min_lon.text())
+                min_lat = parse_coordinate(self.min_lat.text())
+                max_lon = parse_coordinate(self.max_lon.text())
+                max_lat = parse_coordinate(self.max_lat.text())
 
                 if not (-180 <= min_lon <= 180) or not (-180 <= max_lon <= 180):
                     raise ValueError("Longitude must be between -180 and 180")
