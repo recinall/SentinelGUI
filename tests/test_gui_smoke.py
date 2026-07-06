@@ -100,8 +100,9 @@ def test_index_checkboxes_and_select_clear(window):
 
 
 def test_output_defaults(window):
-    assert window.output_path.text().endswith("sentinel_output")
-    assert window.file_prefix.text() == "sentinel"
-    assert window.bit_depth.currentData() == 16
-    assert window.basemap_source.currentData() == "esri"
-    assert window.basemap_zoom.value() == 16
+    tab = window.output_tab
+    assert tab.output_dir().endswith("sentinel_output")
+    assert tab.file_prefix() == "sentinel"
+    assert tab.bit_depth() == 16
+    assert tab.basemap_source() == "esri"
+    assert tab.basemap_zoom() == 16

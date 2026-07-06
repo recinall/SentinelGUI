@@ -12,6 +12,7 @@ import json
 from sentinelgui.core.models import ProcessingParams
 from sentinelgui.core.processor import Sentinel2COGProcessor
 from sentinelgui.ui.tabs.aoi_tab import AoiTab
+from sentinelgui.ui.tabs.output_tab import OutputTab
 from sentinelgui.ui.tabs.processing_tab import ProcessingTab
 from sentinelgui.ui.tabs.search_tab import SearchTab
 from sentinelgui.workers.basemap import BasemapWorker
@@ -48,12 +49,13 @@ class Sentinel2GUI(QMainWindow):
         self.search_tab = SearchTab()
         self.processing_tab = ProcessingTab()
         self.processing_tab.log_requested.connect(self.log)
+        self.output_tab = OutputTab()
 
         tab_widget = QTabWidget()
         tab_widget.addTab(self.aoi_tab, "Area of Interest")
         tab_widget.addTab(self.search_tab, "Search Parameters")
         tab_widget.addTab(self.processing_tab, "Processing Options")
-        tab_widget.addTab(self.create_output_tab(), "Output Settings")
+        tab_widget.addTab(self.output_tab, "Output Settings")
         
         top_layout.addWidget(tab_widget)
         
@@ -124,100 +126,6 @@ class Sentinel2GUI(QMainWindow):
         
         self.log("Application started. Configure search parameters and click 'Search Scenes'.")
         
-    def create_output_tab(self):
-        widget = QWidget()
-        layout = QVBoxLayout(widget)
-        
-        output_group = QGroupBox("Output Directory")
-        output_layout = QHBoxLayout()
-        
-        self.output_path = QLineEdit()
-        self.output_path.setPlaceholderText("Select output directory...")
-        self.output_path.setText(str(Path.home() / "sentinel_output"))
-        
-        output_btn = QPushButton("Browse...")
-        output_btn.clicked.connect(self.browse_output)
-        
-        output_layout.addWidget(self.output_path)
-        output_layout.addWidget(output_btn)
-        output_group.setLayout(output_layout)
-        
-        prefix_group = QGroupBox("File Prefix")
-        prefix_layout = QVBoxLayout()
-        
-        self.file_prefix = QLineEdit()
-        self.file_prefix.setText("sentinel")
-        self.file_prefix.setPlaceholderText("Prefix for output files...")
-        
-        prefix_info = QLabel("Output files will be named: prefix_ndvi.tif, prefix_ndwi.tif, etc.")
-        prefix_info.setStyleSheet("color: #666; font-size: 10px;")
-        
-        prefix_layout.addWidget(self.file_prefix)
-        prefix_layout.addWidget(prefix_info)
-        prefix_group.setLayout(prefix_layout)
-        
-        depth_group = QGroupBox("Bit Depth")
-        depth_layout = QHBoxLayout()
-        
-        self.bit_depth = QComboBox()
-        self.bit_depth.addItem("8-bit (smallest files)", 8)
-        self.bit_depth.addItem("16-bit (recommended)", 16)
-        self.bit_depth.addItem("32-bit Float (highest precision)", 32)
-        self.bit_depth.setCurrentIndex(1)
-        
-        depth_layout.addWidget(QLabel("Output Bit Depth:"))
-        depth_layout.addWidget(self.bit_depth)
-        depth_layout.addStretch()
-        depth_group.setLayout(depth_layout)
-        
-        basemap_group = QGroupBox("Basemap Settings")
-        basemap_layout = QVBoxLayout()
-        
-        basemap_info = QLabel("High-resolution reference imagery (non-radiometric)")
-        basemap_info.setStyleSheet("color: #666; font-style: italic;")
-        basemap_layout.addWidget(basemap_info)
-        
-        source_layout = QHBoxLayout()
-        source_layout.addWidget(QLabel("Imagery Source:"))
-        self.basemap_source = QComboBox()
-        self.basemap_source.addItem("ESRI World Imagery (High Quality)", "esri")
-        self.basemap_source.addItem("Google Satellite", "google")
-        self.basemap_source.addItem("OpenStreetMap (Low Quality)", "osm")
-        source_layout.addWidget(self.basemap_source)
-        source_layout.addStretch()
-        
-        zoom_layout = QHBoxLayout()
-        zoom_layout.addWidget(QLabel("Zoom Level:"))
-        self.basemap_zoom = QSpinBox()
-        self.basemap_zoom.setRange(10, 18)
-        self.basemap_zoom.setValue(16)
-        self.basemap_zoom.setToolTip("Higher = better quality but slower download (10=lowest, 18=highest)")
-        zoom_layout.addWidget(self.basemap_zoom)
-        
-        zoom_info = QLabel("Recommended: 14-16 for cities, 12-14 for rural areas")
-        zoom_info.setStyleSheet("color: #999; font-size: 10px;")
-        zoom_layout.addWidget(zoom_info)
-        zoom_layout.addStretch()
-        
-        basemap_layout.addLayout(source_layout)
-        basemap_layout.addLayout(zoom_layout)
-        basemap_group.setLayout(basemap_layout)
-        
-        layout.addWidget(output_group)
-        layout.addWidget(prefix_group)
-        layout.addWidget(depth_group)
-        layout.addWidget(basemap_group)
-        layout.addStretch()
-        
-        return widget
-    
-    def browse_output(self):
-        dir_path = QFileDialog.getExistingDirectory(
-            self, "Select Output Directory"
-        )
-        if dir_path:
-            self.output_path.setText(dir_path)
-    
     def log(self, message):
         timestamp = datetime.now().strftime("%H:%M:%S")
         self.log_text.append(f"[{timestamp}] {message}")
@@ -307,11 +215,11 @@ class Sentinel2GUI(QMainWindow):
                     "- RGB composite")
                 return
             
-            output_dir = Path(self.output_path.text())
+            output_dir = Path(self.output_tab.output_dir())
             output_dir.mkdir(parents=True, exist_ok=True)
-            
-            output_base = output_dir / self.file_prefix.text()
-            
+
+            output_base = output_dir / self.output_tab.file_prefix()
+
             bbox = self.processor.get_bbox_from_aoi()
             
             params = ProcessingParams(
@@ -322,7 +230,7 @@ class Sentinel2GUI(QMainWindow):
                 algorithms=algorithms,
                 save_bands=self.processing_tab.save_bands(),
                 rgb=self.processing_tab.rgb(),
-                bit_depth=self.bit_depth.currentData(),
+                bit_depth=self.output_tab.bit_depth(),
                 ref_band=self.processing_tab.ref_band(),
             )
             
@@ -367,16 +275,18 @@ class Sentinel2GUI(QMainWindow):
                 geom = shape(aoi if aoi['type'] != 'Feature' else aoi['geometry'])
                 bbox = geom.bounds
             
-            zoom = self.basemap_zoom.value()
-            source = self.basemap_source.currentData()
-            
-            output_dir = Path(self.output_path.text())
+            zoom = self.output_tab.basemap_zoom()
+            source = self.output_tab.basemap_source()
+
+            output_dir = Path(self.output_tab.output_dir())
             output_dir.mkdir(parents=True, exist_ok=True)
-            
-            output_path = output_dir / f"{self.file_prefix.text()}_basemap_{source}_z{zoom}.tif"
-            
+
+            output_path = (
+                output_dir / f"{self.output_tab.file_prefix()}_basemap_{source}_z{zoom}.tif"
+            )
+
             reference_profile = None
-            profile_file = output_dir / f"{self.file_prefix.text()}_reference_profile.json"
+            profile_file = output_dir / f"{self.output_tab.file_prefix()}_reference_profile.json"
             
             if profile_file.exists():
                 try:
