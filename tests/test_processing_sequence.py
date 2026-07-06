@@ -1,24 +1,23 @@
 """Characterization tests for the GUI-observable progress sequence produced by the
-``ProcessingWorker`` in ``sentinelgui.workers.processing`` (both the "search" and
-"process" branches of ``run()``).
+``SearchWorker`` (``sentinelgui.workers.search``) and ``ProcessingWorker``
+(``sentinelgui.workers.processing``).
 
-``ProcessingWorker`` is a ``QThread`` subclass, but it is exercised here by calling
-``.run()`` directly and SYNCHRONOUSLY (never ``.start()``), so nothing is offloaded
-to a real worker thread and no Qt event loop is required. The offscreen platform is
-set process-wide by ``tests/conftest.py``, which is what makes importing the
-worker (a module-scope ``PySide6`` import) safe here.
+Both are ``QThread`` subclasses, but they are exercised here by calling ``.run()``
+directly and SYNCHRONOUSLY (never ``.start()``), so nothing is offloaded to a real
+worker thread and no Qt event loop is required. The offscreen platform is set
+process-wide by ``tests/conftest.py``, which is what makes importing the workers
+(a module-scope ``PySide6`` import) safe here.
 
 The processor is fully faked (no network, no rasterio reads) via a plain class with
-canned return values, so the "search" case exercises only ``ProcessingWorker.run()``
-itself, while the "process" case drives ``Sentinel2COGProcessor.process_scene``.
-The only real I/O boundary left inside ``run()`` for the RGB branch is an inline
+canned return values, so the search case exercises only ``SearchWorker.run()``
+itself, while the process case drives ``Sentinel2COGProcessor.process_scene``.
+The only real I/O boundary left for the RGB branch is an inline
 ``rasterio.open(path, 'w', **profile)`` write, which is monkeypatched to a
 context-manager stub so nothing touches disk.
 
-This is a pixel-for-pixel snapshot of the *exact* ordered progress strings and the
-finished/scene_found payloads as they exist today, so a future extraction of this
-logic into ``core/`` (wrapped by a real ``workers/processing.py``) can be checked
-against it without behavior drift.
+This is a snapshot of the *exact* ordered progress strings and the
+finished/scene_found payloads, so refactors of the workers or ``process_scene``
+can be checked against it without behavior drift.
 """
 
 import numpy as np
@@ -27,6 +26,7 @@ import rasterio
 from sentinelgui.core.models import ProcessingParams
 from sentinelgui.core.processor import Sentinel2COGProcessor
 from sentinelgui.workers.processing import ProcessingWorker
+from sentinelgui.workers.search import SearchWorker
 
 
 def _make_processor():
@@ -127,18 +127,18 @@ class _FakeRasterioOpen:
         return False
 
 
-def _run_thread(processor, task_type, params):
-    thread = ProcessingWorker(processor, task_type, params)
-
+def _run_thread(worker):
     progress_msgs = []
     finished_calls = []
     scene_found_calls = []
 
-    thread.progress.connect(progress_msgs.append)
-    thread.finished.connect(lambda ok, msg: finished_calls.append((ok, msg)))
-    thread.scene_found.connect(scene_found_calls.append)
+    worker.progress.connect(progress_msgs.append)
+    worker.finished.connect(lambda ok, msg: finished_calls.append((ok, msg)))
+    # scene_found only exists on the search worker; the process worker never emits it.
+    if hasattr(worker, "scene_found"):
+        worker.scene_found.connect(scene_found_calls.append)
 
-    thread.run()
+    worker.run()
 
     return progress_msgs, finished_calls, scene_found_calls
 
@@ -208,16 +208,15 @@ def test_process_task_reference_profile_only_reported_once():
     assert summary == "Processing complete! Generated 0 indices"
 
 
-def test_process_task_full_dict_via_worker_emits_exact_progress_sequence(monkeypatch):
-    """Freezes the CURRENT dict-based ``ProcessingWorker`` "process" branch contract,
-    ahead of the planned ``ProcessingParams`` dataclass migration.
+def test_process_task_via_worker_emits_exact_progress_sequence(monkeypatch):
+    """Freezes the ``ProcessingWorker`` contract: it forwards its ``ProcessingParams``
+    straight to ``process_scene`` and re-emits progress/finished unchanged.
 
     Drives ``ProcessingWorker.run()`` (not ``process_scene`` directly) with a fully
-    populated ``params`` dict, so every ``params[...]``/``params.get(...)`` access on
-    the worker's "process" branch is exercised through the real worker object. This
-    must keep producing the exact same progress sequence and finished payload as the
-    existing direct-call test (``test_process_task_emits_exact_progress_sequence``)
-    for the same effective arguments.
+    populated ``ProcessingParams``, so the real worker object is exercised. This must
+    keep producing the exact same progress sequence and finished payload as the
+    direct-call test (``test_process_task_emits_exact_progress_sequence``) for the
+    same effective arguments.
     """
     monkeypatch.setattr(rasterio, "open", _FakeRasterioOpen)
 
@@ -235,7 +234,9 @@ def test_process_task_full_dict_via_worker_emits_exact_progress_sequence(monkeyp
         ref_band="b04",
     )
 
-    progress_msgs, finished_calls, scene_found_calls = _run_thread(processor, "process", params)
+    progress_msgs, finished_calls, scene_found_calls = _run_thread(
+        ProcessingWorker(processor, params)
+    )
 
     assert progress_msgs == [
         "Processing scene 0...",
@@ -256,9 +257,9 @@ def test_process_task_full_dict_via_worker_emits_exact_progress_sequence(monkeyp
     assert scene_found_calls == []
 
 
-def test_process_task_minimal_dict_via_worker_uses_dataclass_defaults(monkeypatch):
-    """Freezes the omitted-field defaults on ``ProcessingWorker``'s "process" branch,
-    which now come from the ``ProcessingParams`` dataclass.
+def test_process_task_via_worker_uses_dataclass_defaults(monkeypatch):
+    """Freezes the omitted-field defaults driven through ``ProcessingWorker``, which
+    now come from the ``ProcessingParams`` dataclass.
 
     Only the required fields (``scene_index``, ``bbox``, ``bands_to_load``, ``output``)
     are supplied; ``algorithms``, ``save_bands``, ``rgb``, ``bit_depth``, and
@@ -277,7 +278,9 @@ def test_process_task_minimal_dict_via_worker_uses_dataclass_defaults(monkeypatc
         output="/tmp/out",
     )
 
-    progress_msgs, finished_calls, scene_found_calls = _run_thread(processor, "process", params)
+    progress_msgs, finished_calls, scene_found_calls = _run_thread(
+        ProcessingWorker(processor, params)
+    )
 
     assert progress_msgs == [
         "Processing scene 0...",
@@ -296,7 +299,7 @@ def test_process_task_minimal_dict_via_worker_uses_dataclass_defaults(monkeypatc
 def test_search_task_emits_expected_sequence_and_payloads():
     processor = FakeProcessor()
 
-    progress_msgs, finished_calls, scene_found_calls = _run_thread(processor, "search", {})
+    progress_msgs, finished_calls, scene_found_calls = _run_thread(SearchWorker(processor))
 
     assert progress_msgs == ["Searching for scenes..."]
     assert finished_calls == [(True, "Found 2 scenes")]

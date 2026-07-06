@@ -13,6 +13,7 @@ from sentinelgui.core.models import ProcessingParams
 from sentinelgui.core.processor import Sentinel2COGProcessor
 from sentinelgui.workers.basemap import BasemapWorker
 from sentinelgui.workers.processing import ProcessingWorker
+from sentinelgui.workers.search import SearchWorker
 from rasterio.crs import CRS
 
 
@@ -21,6 +22,7 @@ class Sentinel2GUI(QMainWindow):
         super().__init__()
         self.processor = None
         self.scenes = []
+        self.search_thread = None
         self.processing_thread = None
         self.basemap_thread = None
         self.initUI()
@@ -514,11 +516,11 @@ class Sentinel2GUI(QMainWindow):
             self.progress_bar.setRange(0, 0)
             self.search_btn.setEnabled(False)
             
-            self.processing_thread = ProcessingWorker(self.processor, "search", {})
-            self.processing_thread.progress.connect(self.log)
-            self.processing_thread.scene_found.connect(self.populate_scene_table)
-            self.processing_thread.finished.connect(self.on_search_finished)
-            self.processing_thread.start()
+            self.search_thread = SearchWorker(self.processor)
+            self.search_thread.progress.connect(self.log)
+            self.search_thread.scene_found.connect(self.populate_scene_table)
+            self.search_thread.finished.connect(self.on_search_finished)
+            self.search_thread.start()
             
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Search failed: {str(e)}")
@@ -619,7 +621,7 @@ class Sentinel2GUI(QMainWindow):
             self.process_btn.setEnabled(False)
             self.search_btn.setEnabled(False)
             
-            self.processing_thread = ProcessingWorker(self.processor, "process", params)
+            self.processing_thread = ProcessingWorker(self.processor, params)
             self.processing_thread.progress.connect(self.log)
             self.processing_thread.finished.connect(self.on_process_finished)
             self.processing_thread.start()

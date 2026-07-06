@@ -1,21 +1,23 @@
-"""QThread wrapping core.processor.process_scene; its progress callback becomes a Signal."""
+"""QThread wrapping core.processor.search_scenes, translating its progress into Signals."""
 
 from PySide6.QtCore import QThread, Signal
 
 
-class ProcessingWorker(QThread):
+class SearchWorker(QThread):
     progress = Signal(str)
     finished = Signal(bool, str)
+    scene_found = Signal(list)
 
-    def __init__(self, processor, params):
+    def __init__(self, processor):
         super().__init__()
         self.processor = processor
-        self.params = params
 
     def run(self):
         try:
-            summary = self.processor.process_scene(self.params, progress=self.progress.emit)
-            self.finished.emit(True, summary)
+            self.progress.emit("Searching for scenes...")
+            scenes = self.processor.search_scenes()
+            self.scene_found.emit(scenes)
+            self.finished.emit(True, f"Found {len(scenes)} scenes")
 
         except Exception as e:
             import traceback
