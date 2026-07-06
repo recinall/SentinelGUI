@@ -203,3 +203,95 @@ def test_process_full_run_emits_exact_narration(monkeypatch, capsys):
         "\nProcessing complete!\n"
     )
     assert err == ""
+
+
+# ---------------------------------------------------------------------------
+# overlay
+# ---------------------------------------------------------------------------
+
+
+_OVERLAY_MIN = ["overlay", "--index", "idx.tif", "--output", "out.tif"]
+
+
+def test_overlay_opacity_out_of_range(capsys):
+    with pytest.raises(SystemExit) as exc:
+        cli.main([*_OVERLAY_MIN, "--opacity", "1.5"])
+    assert exc.value.code == 2
+    assert "--opacity must be between 0.0 and 1.0" in capsys.readouterr().err
+
+
+def test_overlay_threshold_out_of_range(capsys):
+    with pytest.raises(SystemExit) as exc:
+        cli.main([*_OVERLAY_MIN, "--threshold", "150"])
+    assert exc.value.code == 2
+    assert "--threshold must be between 0.0 and 100.0" in capsys.readouterr().err
+
+
+def test_overlay_level_out_of_range(capsys):
+    with pytest.raises(SystemExit) as exc:
+        cli.main([
+            *_OVERLAY_MIN, "--mode", "gradient",
+            "--levels", "0", "200", "--colors", "#000000", "#ffffff",
+        ])
+    assert exc.value.code == 2
+    assert "--levels values must be between 0.0 and 100.0" in capsys.readouterr().err
+
+
+def test_overlay_class_mode_level_color_mismatch(capsys):
+    with pytest.raises(SystemExit) as exc:
+        cli.main([
+            *_OVERLAY_MIN, "--mode", "class",
+            "--levels", "0", "100", "--colors", "#000000", "#ffffff",
+        ])
+    assert exc.value.code == 2
+    assert "For 'class' mode, number of levels" in capsys.readouterr().err
+
+
+def test_overlay_gradient_mode_level_color_mismatch(capsys):
+    with pytest.raises(SystemExit) as exc:
+        cli.main([
+            *_OVERLAY_MIN, "--mode", "gradient",
+            "--levels", "0", "50", "100", "--colors", "#000000", "#ffffff",
+        ])
+    assert exc.value.code == 2
+    assert "For 'gradient' mode, number of levels" in capsys.readouterr().err
+
+
+def test_overlay_gradient_needs_two_levels(capsys):
+    with pytest.raises(SystemExit) as exc:
+        cli.main([*_OVERLAY_MIN, "--mode", "gradient", "--levels", "0", "--colors", "#000000"])
+    assert exc.value.code == 2
+    assert "you need at least 2 levels/colors" in capsys.readouterr().err
+
+
+def test_overlay_invalid_hex_color(capsys):
+    with pytest.raises(SystemExit) as exc:
+        cli.main([
+            *_OVERLAY_MIN, "--mode", "gradient",
+            "--levels", "0", "100", "--colors", "notacolor", "#ffffff",
+        ])
+    assert exc.value.code == 2
+    assert "Invalid hex color in --colors" in capsys.readouterr().err
+
+
+def test_overlay_success_path_calls_core_with_positional_order(monkeypatch):
+    """The overlay success path forwards args positionally in a fixed order:
+    (rgb, index, output, levels, colors, opacity, threshold, mode)."""
+    recorded = {}
+
+    def fake_create_overlay(*args):
+        recorded["args"] = args
+
+    monkeypatch.setattr(cli, "create_overlay", fake_create_overlay)
+    cli.main(_OVERLAY_MIN)  # no SystemExit on the success path
+
+    assert recorded["args"] == (
+        None,  # --rgb (not provided)
+        "idx.tif",
+        "out.tif",
+        [0.0, 25.0, 50.0, 75.0, 100.0],  # default levels
+        ["#0000FF", "#FF0000", "#FFFF00", "#00FF00", "#007200"],  # default colors
+        0.7,  # default opacity
+        10.0,  # default threshold
+        "gradient",  # default mode
+    )
