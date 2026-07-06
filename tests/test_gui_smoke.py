@@ -53,6 +53,14 @@ def test_window_title_and_tabs(window):
     ]
 
 
+def test_app_icon_loads(app):
+    # The bundled resources/icon.png must resolve and produce a non-null QIcon so the
+    # frozen app shows its own icon instead of Qt's default (needs a QApplication for QPixmap).
+    from sentinelgui.app import _app_icon
+
+    assert _app_icon().isNull() is False
+
+
 def test_action_buttons_initial_state(window):
     assert window.search_btn.isEnabled() is True
     assert window.basemap_btn.isEnabled() is True
