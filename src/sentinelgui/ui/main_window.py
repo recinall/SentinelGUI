@@ -212,7 +212,10 @@ class Sentinel2GUI(QMainWindow):
                 ref_band=self.processing_tab.ref_band(),
             )
             
-            self.log(f"Starting processing with {len(algorithms)} indices and {len(bands_to_load)} bands...")
+            self.log(
+                f"Starting processing with {len(algorithms)} indices "
+                f"and {len(bands_to_load)} bands..."
+            )
             if algorithms:
                 self.log(f"Indices to calculate: {', '.join(algorithms)}")
             
@@ -268,7 +271,7 @@ class Sentinel2GUI(QMainWindow):
             
             if profile_file.exists():
                 try:
-                    with open(profile_file, 'r') as f:
+                    with open(profile_file) as f:
                         profile_data = json.load(f)
                     
                     from rasterio.transform import Affine
@@ -283,7 +286,8 @@ class Sentinel2GUI(QMainWindow):
                         self, 
                         "Download Basemap",
                         f"Found reference profile from previous Sentinel processing.\n"
-                        f"Grid: {reference_profile['width']}x{reference_profile['height']} pixels\n\n"
+                        f"Grid: {reference_profile['width']}x{reference_profile['height']} "
+                        f"pixels\n\n"
                         f"Align basemap to this grid?\n"
                         f"(This ensures perfect overlay with Sentinel data)",
                         QMessageBox.Yes | QMessageBox.No
@@ -319,7 +323,9 @@ class Sentinel2GUI(QMainWindow):
             self.process_btn.setEnabled(False)
             self.basemap_btn.setEnabled(False)
             
-            self.basemap_thread = BasemapWorker(bbox, zoom, source, str(output_path), reference_profile)
+            self.basemap_thread = BasemapWorker(
+                bbox, zoom, source, str(output_path), reference_profile
+            )
             self.basemap_thread.progress.connect(self.log)
             self.basemap_thread.finished.connect(self.on_basemap_finished)
             self.basemap_thread.start()

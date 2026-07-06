@@ -21,7 +21,7 @@ import pytest
 from PySide6.QtWidgets import QApplication, QTabWidget
 
 from sentinelgui.core.processor import Sentinel2COGProcessor
-from sentinelgui.sentinel_gui import Sentinel2GUI
+from sentinelgui.ui.main_window import Sentinel2GUI
 
 
 @pytest.fixture(scope="module")
