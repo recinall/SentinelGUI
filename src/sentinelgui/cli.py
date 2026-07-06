@@ -18,6 +18,7 @@ import sys
 import numpy as np
 import rasterio
 
+from sentinelgui.core.basemap import BasemapDownloader
 from sentinelgui.core.overlay import create_overlay, hex_to_rgba
 from sentinelgui.core.processor import Sentinel2COGProcessor
 
@@ -228,6 +229,29 @@ def _cmd_overlay(args: argparse.Namespace) -> None:
     )
 
 
+def _cmd_basemap(args: argparse.Namespace) -> None:
+    """Download and georeference a basemap for the AOI bbox (headless).
+
+    Wraps :meth:`core.basemap.BasemapDownloader.download_basemap` on its
+    non-aligned path and streams its progress to stdout. The reference-alignment
+    path (fitting a basemap to an existing raster's grid) is deliberately not
+    exposed here — it is a GUI-only concern driven by a loaded reference profile.
+    """
+    _result, downloaded, failed, total = BasemapDownloader.download_basemap(
+        args.bbox,
+        args.zoom,
+        args.source,
+        args.output,
+        progress=print,
+    )
+
+    message = f"Downloaded {downloaded}/{total} tiles successfully"
+    if failed > 0:
+        message += f" ({failed} failed)"
+
+    print(message)
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Build the top-level parser with one subparser per subcommand."""
     parser = argparse.ArgumentParser(
@@ -327,6 +351,23 @@ def build_parser() -> argparse.ArgumentParser:
              "gradient). Default: gradient",
     )
     overlay.set_defaults(func=_cmd_overlay, parser=overlay)
+
+    basemap = subparsers.add_parser(
+        "basemap", help="Download a georeferenced basemap for an AOI bounding box",
+    )
+    basemap.add_argument(
+        "--bbox", type=float, nargs=4, required=True, metavar=("MINX", "MINY", "MAXX", "MAXY"),
+        help="Bounding box in WGS84 (lon_min lat_min lon_max lat_max)",
+    )
+    basemap.add_argument("--zoom", type=int, required=True, help="Slippy-map zoom level")
+    basemap.add_argument(
+        "--source", choices=["esri", "google", "osm"], default="esri",
+        help="Imagery source (default: esri)",
+    )
+    basemap.add_argument(
+        "--output", type=str, required=True, help="Output GeoTIFF path for the basemap",
+    )
+    basemap.set_defaults(func=_cmd_basemap)
 
     return parser
 

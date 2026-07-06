@@ -10,8 +10,11 @@ the RGB branch is monkeypatched to a context-manager stub.
 import numpy as np
 import pytest
 import rasterio
+from PIL import Image
 
 import sentinelgui.cli as cli
+import sentinelgui.core.basemap as core_basemap
+from sentinelgui.core.basemap import BasemapDownloader
 
 
 class _FakeProcessor:
@@ -57,7 +60,7 @@ class _FakeProcessor:
 
 
 class _FakeRasterioDataset:
-    def write(self, data):
+    def write(self, *args, **kwargs):
         pass
 
 
@@ -295,3 +298,69 @@ def test_overlay_success_path_calls_core_with_positional_order(monkeypatch):
         10.0,  # default threshold
         "gradient",  # default mode
     )
+
+
+# ---------------------------------------------------------------------------
+# basemap
+# ---------------------------------------------------------------------------
+
+
+_BASEMAP_BBOX = ["--bbox", "11.0", "46.0", "11.5", "46.5"]  # zoom 8 -> a 2x2 grid
+
+
+def _patch_basemap(monkeypatch, failing_tile=None):
+    """Fake the tile HTTP and the rasterio write so basemap runs offline, no disk."""
+
+    def fake_download_tile(x, y, zoom, source="osm"):
+        if failing_tile is not None and (x, y) == failing_tile:
+            return None
+        return Image.new("RGB", (256, 256))
+
+    monkeypatch.setattr(BasemapDownloader, "download_tile", fake_download_tile)
+    monkeypatch.setattr(core_basemap.rasterio, "open", _FakeRasterioOpen)
+
+
+def test_basemap_requires_output(capsys):
+    with pytest.raises(SystemExit) as exc:
+        cli.main(["basemap", *_BASEMAP_BBOX, "--zoom", "8"])
+    assert exc.value.code == 2
+    assert "--output" in capsys.readouterr().err
+
+
+def test_basemap_requires_zoom(capsys):
+    with pytest.raises(SystemExit) as exc:
+        cli.main(["basemap", *_BASEMAP_BBOX, "--output", "/tmp/base.tif"])
+    assert exc.value.code == 2
+    assert "--zoom" in capsys.readouterr().err
+
+
+def test_basemap_rejects_unknown_source(capsys):
+    with pytest.raises(SystemExit) as exc:
+        cli.main([
+            "basemap", *_BASEMAP_BBOX, "--zoom", "8", "--output", "/tmp/b.tif", "--source", "bing",
+        ])
+    assert exc.value.code == 2
+    assert "invalid choice: 'bing'" in capsys.readouterr().err
+
+
+def test_basemap_success_emits_progress_and_summary(monkeypatch, capsys):
+    _patch_basemap(monkeypatch)
+    cli.main(["basemap", *_BASEMAP_BBOX, "--zoom", "8", "--output", "/tmp/base.tif"])
+    out = capsys.readouterr().out
+    assert out == (
+        "Downloading basemap tiles at zoom level 8...\n"
+        "Source: ESRI\n"
+        "Downloaded 4/4 tiles successfully\n"
+    )
+
+
+def test_basemap_reports_failed_tiles(monkeypatch, capsys):
+    # For this bbox/zoom the grid starts at (135, 90); fail exactly one tile.
+    _patch_basemap(monkeypatch, failing_tile=(136, 91))
+    cli.main([
+        "basemap", *_BASEMAP_BBOX, "--zoom", "8",
+        "--output", "/tmp/base.tif", "--source", "google",
+    ])
+    out = capsys.readouterr().out
+    assert out.startswith("Downloading basemap tiles at zoom level 8...\nSource: GOOGLE\n")
+    assert out.endswith("Downloaded 3/4 tiles successfully (1 failed)\n")
