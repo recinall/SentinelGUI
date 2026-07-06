@@ -6,133 +6,13 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                                QComboBox, QCheckBox, QSpinBox, QDoubleSpinBox, QTextEdit,
                                QFileDialog, QTabWidget, QTableWidget, QTableWidgetItem,
                                QProgressBar, QMessageBox, QSplitter, QHeaderView, QScrollArea)
-from PySide6.QtCore import Qt, QThread, Signal, QTimer
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QFont, QIcon
 import json
 from sentinelgui.core.processor import Sentinel2COGProcessor
 from sentinelgui.workers.basemap import BasemapWorker
-import numpy as np
-import rasterio
+from sentinelgui.workers.processing import ProcessingWorker
 from rasterio.crs import CRS
-
-
-class ProcessingThread(QThread):
-    progress = Signal(str)
-    finished = Signal(bool, str)
-    scene_found = Signal(list)
-    
-    def __init__(self, processor, task_type, params):
-        super().__init__()
-        self.processor = processor
-        self.task_type = task_type
-        self.params = params
-        
-    def run(self):
-        try:
-            if self.task_type == "search":
-                self.progress.emit("Searching for scenes...")
-                scenes = self.processor.search_scenes()
-                self.scene_found.emit(scenes)
-                self.finished.emit(True, f"Found {len(scenes)} scenes")
-                
-            elif self.task_type == "process":
-                scene_index = self.params['scene_index']
-                bbox = self.params['bbox']
-                bands_to_load = self.params['bands_to_load']
-                output = self.params['output']
-                algorithms = self.params.get('algorithms', [])
-                save_bands = self.params.get('save_bands', False)
-                rgb = self.params.get('rgb', False)
-                bit_depth = self.params.get('bit_depth', 16)
-                ref_band = self.params.get('ref_band')
-                
-                self.progress.emit(f"Processing scene {scene_index}...")
-                band_urls = self.processor.get_scene_assets(scene_index)
-                
-                loaded_bands = {}
-                reference_profile = None
-                
-                bands_order = sorted(bands_to_load)
-                if ref_band and ref_band in bands_to_load:
-                    bands_order.remove(ref_band)
-                    bands_order.insert(0, ref_band)
-                
-                total_steps = len(bands_order) + len(algorithms) + (1 if rgb else 0)
-                current_step = 0
-                
-                for band in bands_order:
-                    if band not in band_urls:
-                        self.progress.emit(f"Warning: Band {band} not available")
-                        continue
-                    
-                    current_step += 1
-                    self.progress.emit(f"[{current_step}/{total_steps}] Loading {band}...")
-                    
-                    data, band_profile = self.processor.load_band_window(
-                        band_urls[band], 
-                        bbox,
-                        reference_profile=reference_profile
-                    )
-                    
-                    loaded_bands[band] = data
-                    
-                    if reference_profile is None:
-                        reference_profile = band_profile
-                        self.progress.emit(f"  Using {band} as reference ({data.shape[1]}x{data.shape[0]} pixels)")
-                    
-                    if save_bands:
-                        output_path = f"{output}_band_{band}.tif"
-                        self.processor.save_raster(data, reference_profile, output_path, bit_depth=bit_depth, scale_range=(0,1))
-                        self.progress.emit(f"  Saved: {output_path}")
-                
-                for algorithm in algorithms:
-                    current_step += 1
-                    self.progress.emit(f"[{current_step}/{total_steps}] Calculating {algorithm}...")
-                    
-                    try:
-                        index_data = self.processor.calculate_index(algorithm, loaded_bands)
-                        output_path = f"{output}_{algorithm.lower()}.tif"
-                        self.processor.save_raster(index_data, reference_profile, output_path, 
-                                                 bit_depth=bit_depth, scale_range=(-1, 1))
-                        self.progress.emit(f"  Saved: {output_path}")
-                    except Exception as e:
-                        self.progress.emit(f"  Error calculating {algorithm}: {str(e)}")
-                
-                if rgb:
-                    current_step += 1
-                    self.progress.emit(f"[{current_step}/{total_steps}] Creating RGB composite...")
-                    
-                    rgb_data = self.processor.create_rgb_composite(loaded_bands)
-                    output_path = f"{output}_rgb.tif"
-                    
-                    rgb_8bit = (rgb_data * 255).astype('uint8')
-                    import numpy as np
-                    rgb_profile = reference_profile.copy()
-                    rgb_profile.update({
-                        'dtype': 'uint8',
-                        'count': 3,
-                        'photometric': 'RGB'
-                    })
-                    
-                    import rasterio
-                    with rasterio.open(output_path, 'w', **rgb_profile) as dst:
-                        dst.write(rgb_8bit)
-                    
-                    self.progress.emit(f"  Saved: {output_path}")
-                
-                summary = f"Processing complete! Generated {len(algorithms)} indices"
-                if save_bands:
-                    summary += f", {len(loaded_bands)} bands"
-                if rgb:
-                    summary += ", 1 RGB composite"
-                
-                self.finished.emit(True, summary)
-                
-        except Exception as e:
-            import traceback
-            error_detail = traceback.format_exc()
-            self.progress.emit(f"ERROR: {error_detail}")
-            self.finished.emit(False, str(e))
 
 
 class Sentinel2GUI(QMainWindow):
@@ -633,7 +513,7 @@ class Sentinel2GUI(QMainWindow):
             self.progress_bar.setRange(0, 0)
             self.search_btn.setEnabled(False)
             
-            self.processing_thread = ProcessingThread(self.processor, "search", {})
+            self.processing_thread = ProcessingWorker(self.processor, "search", {})
             self.processing_thread.progress.connect(self.log)
             self.processing_thread.scene_found.connect(self.populate_scene_table)
             self.processing_thread.finished.connect(self.on_search_finished)
@@ -738,7 +618,7 @@ class Sentinel2GUI(QMainWindow):
             self.process_btn.setEnabled(False)
             self.search_btn.setEnabled(False)
             
-            self.processing_thread = ProcessingThread(self.processor, "process", params)
+            self.processing_thread = ProcessingWorker(self.processor, "process", params)
             self.processing_thread.progress.connect(self.log)
             self.processing_thread.finished.connect(self.on_process_finished)
             self.processing_thread.start()

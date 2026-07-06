@@ -1,15 +1,16 @@
 """Characterization tests for the GUI-observable progress sequence produced by the
-inline ``ProcessingThread`` in ``sentinelgui.sentinel_gui`` (both the "search" and
+``ProcessingWorker`` in ``sentinelgui.workers.processing`` (both the "search" and
 "process" branches of ``run()``).
 
-``ProcessingThread`` is a ``QThread`` subclass, but it is exercised here by calling
+``ProcessingWorker`` is a ``QThread`` subclass, but it is exercised here by calling
 ``.run()`` directly and SYNCHRONOUSLY (never ``.start()``), so nothing is offloaded
 to a real worker thread and no Qt event loop is required. The offscreen platform is
-set process-wide by ``tests/conftest.py``, which is what makes importing
-``sentinel_gui`` (a module-scope ``PySide6`` import) safe here.
+set process-wide by ``tests/conftest.py``, which is what makes importing the
+worker (a module-scope ``PySide6`` import) safe here.
 
 The processor is fully faked (no network, no rasterio reads) via a plain class with
-canned return values, so this file exercises only ``ProcessingThread.run()`` itself.
+canned return values, so the "search" case exercises only ``ProcessingWorker.run()``
+itself, while the "process" case drives ``Sentinel2COGProcessor.process_scene``.
 The only real I/O boundary left inside ``run()`` for the RGB branch is an inline
 ``rasterio.open(path, 'w', **profile)`` write, which is monkeypatched to a
 context-manager stub so nothing touches disk.
@@ -24,7 +25,7 @@ import numpy as np
 import rasterio
 
 from sentinelgui.core.processor import Sentinel2COGProcessor
-from sentinelgui.sentinel_gui import ProcessingThread
+from sentinelgui.workers.processing import ProcessingWorker
 
 
 def _make_processor():
@@ -126,7 +127,7 @@ class _FakeRasterioOpen:
 
 
 def _run_thread(processor, task_type, params):
-    thread = ProcessingThread(processor, task_type, params)
+    thread = ProcessingWorker(processor, task_type, params)
 
     progress_msgs = []
     finished_calls = []
