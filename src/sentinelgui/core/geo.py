@@ -6,6 +6,11 @@ conversion. Everything here is headless-testable.
 """
 
 import re
+from math import cos, radians
+
+# Kilometres per degree. Latitude is ~constant; longitude shrinks with cos(lat).
+_KM_PER_DEG_LAT = 110.574
+_KM_PER_DEG_LON_EQUATOR = 111.32
 
 # Hemisphere letters and the sign they imply. N/E are positive, S/W negative.
 _HEMISPHERE = {"N": 1, "S": -1, "E": 1, "W": -1}
@@ -76,3 +81,31 @@ def parse_coordinate(text: str) -> float:
             raise ValueError(f"could not parse coordinate: {raw!r}") from None
 
     return sign * value
+
+
+def bbox_from_center(
+    lat: float, lon: float, width_km: float, height_km: float
+) -> list[float]:
+    """Build a WGS84 bounding box centered on ``(lat, lon)``.
+
+    ``width_km``/``height_km`` are the *total* extent of the window (half is
+    applied to each side). The longitude span is latitude-dependent
+    (``dlon = (width_km / 2) / (111.32 * cos(lat))``). Returns
+    ``[min_lon, min_lat, max_lon, max_lat]``. Raises :class:`ValueError` for an
+    out-of-range center, a non-positive size, or a latitude where the longitude
+    span is undefined (the poles).
+    """
+    if not (-90 <= lat <= 90):
+        raise ValueError("Latitude must be between -90 and 90")
+    if not (-180 <= lon <= 180):
+        raise ValueError("Longitude must be between -180 and 180")
+    if width_km <= 0 or height_km <= 0:
+        raise ValueError("Window size (km) must be positive")
+
+    dlat = (height_km / 2.0) / _KM_PER_DEG_LAT
+    km_per_deg_lon = _KM_PER_DEG_LON_EQUATOR * cos(radians(lat))
+    if km_per_deg_lon <= 0:
+        raise ValueError("Cannot compute a longitude window at this latitude")
+    dlon = (width_km / 2.0) / km_per_deg_lon
+
+    return [lon - dlon, lat - dlat, lon + dlon, lat + dlat]

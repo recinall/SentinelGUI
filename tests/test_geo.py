@@ -4,7 +4,7 @@ import math
 
 import pytest
 
-from sentinelgui.core.geo import parse_coordinate
+from sentinelgui.core.geo import bbox_from_center, parse_coordinate
 
 
 def test_parses_plain_decimal():
@@ -82,3 +82,52 @@ def test_result_is_finite_float():
     value = parse_coordinate("10°59'24.90\"")
     assert isinstance(value, float)
     assert math.isfinite(value)
+
+
+# -- bbox_from_center --
+
+
+def test_bbox_at_equator_known_values():
+    # width 222.64 km -> ±1° lon at the equator; height 221.148 km -> ±1° lat.
+    bbox = bbox_from_center(0.0, 0.0, 222.64, 221.148)
+    min_lon, min_lat, max_lon, max_lat = bbox
+    assert min_lon == pytest.approx(-1.0)
+    assert max_lon == pytest.approx(1.0)
+    assert min_lat == pytest.approx(-1.0)
+    assert max_lat == pytest.approx(1.0)
+
+
+def test_bbox_is_symmetric_around_center():
+    lat, lon = 46.0, 11.0
+    min_lon, min_lat, max_lon, max_lat = bbox_from_center(lat, lon, 10.0, 10.0)
+    assert (min_lon + max_lon) / 2 == pytest.approx(lon)
+    assert (min_lat + max_lat) / 2 == pytest.approx(lat)
+
+
+def test_bbox_longitude_span_widens_with_latitude():
+    # Same width in km spans more degrees of longitude nearer the pole.
+    span_low = bbox_from_center(0.0, 11.0, 100.0, 10.0)
+    span_high = bbox_from_center(60.0, 11.0, 100.0, 10.0)
+    width_low = span_low[2] - span_low[0]
+    width_high = span_high[2] - span_high[0]
+    assert width_high > width_low
+
+
+def test_bbox_latitude_span_is_latitude_independent():
+    low = bbox_from_center(0.0, 11.0, 10.0, 100.0)
+    high = bbox_from_center(60.0, 11.0, 10.0, 100.0)
+    assert (low[3] - low[1]) == pytest.approx(high[3] - high[1])
+
+
+@pytest.mark.parametrize(
+    "lat,lon,w,h",
+    [
+        (91.0, 0.0, 10.0, 10.0),
+        (0.0, 181.0, 10.0, 10.0),
+        (0.0, 0.0, 0.0, 10.0),
+        (0.0, 0.0, 10.0, -5.0),
+    ],
+)
+def test_bbox_invalid_inputs_raise(lat, lon, w, h):
+    with pytest.raises(ValueError):
+        bbox_from_center(lat, lon, w, h)
