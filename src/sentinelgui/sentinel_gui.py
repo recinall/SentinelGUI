@@ -12,6 +12,7 @@ import json
 from sentinelgui.core.models import ProcessingParams
 from sentinelgui.core.processor import Sentinel2COGProcessor
 from sentinelgui.ui.tabs.aoi_tab import AoiTab
+from sentinelgui.ui.tabs.search_tab import SearchTab
 from sentinelgui.workers.basemap import BasemapWorker
 from sentinelgui.workers.processing import ProcessingWorker
 from sentinelgui.workers.search import SearchWorker
@@ -43,10 +44,11 @@ class Sentinel2GUI(QMainWindow):
         top_layout = QVBoxLayout(top_widget)
         
         self.aoi_tab = AoiTab()
+        self.search_tab = SearchTab()
 
         tab_widget = QTabWidget()
         tab_widget.addTab(self.aoi_tab, "Area of Interest")
-        tab_widget.addTab(self.create_search_tab(), "Search Parameters")
+        tab_widget.addTab(self.search_tab, "Search Parameters")
         tab_widget.addTab(self.create_processing_tab(), "Processing Options")
         tab_widget.addTab(self.create_output_tab(), "Output Settings")
         
@@ -119,48 +121,6 @@ class Sentinel2GUI(QMainWindow):
         
         self.log("Application started. Configure search parameters and click 'Search Scenes'.")
         
-    def create_search_tab(self):
-        widget = QWidget()
-        layout = QVBoxLayout(widget)
-        
-        date_group = QGroupBox("Date Range")
-        date_layout = QHBoxLayout()
-        
-        start_layout = QVBoxLayout()
-        start_layout.addWidget(QLabel("Start Date (YYYY-MM-DD):"))
-        self.date_start = QLineEdit()
-        self.date_start.setText((datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d"))
-        start_layout.addWidget(self.date_start)
-        
-        end_layout = QVBoxLayout()
-        end_layout.addWidget(QLabel("End Date (YYYY-MM-DD):"))
-        self.date_end = QLineEdit()
-        self.date_end.setText(datetime.now().strftime("%Y-%m-%d"))
-        end_layout.addWidget(self.date_end)
-        
-        date_layout.addLayout(start_layout)
-        date_layout.addLayout(end_layout)
-        date_group.setLayout(date_layout)
-        
-        cloud_group = QGroupBox("Cloud Cover Filter")
-        cloud_layout = QHBoxLayout()
-        
-        cloud_layout.addWidget(QLabel("Maximum Cloud Cover (%):"))
-        self.cloud_cover = QDoubleSpinBox()
-        self.cloud_cover.setRange(0, 100)
-        self.cloud_cover.setValue(20.0)
-        self.cloud_cover.setSingleStep(5.0)
-        
-        cloud_layout.addWidget(self.cloud_cover)
-        cloud_layout.addStretch()
-        cloud_group.setLayout(cloud_layout)
-        
-        layout.addWidget(date_group)
-        layout.addWidget(cloud_group)
-        layout.addStretch()
-        
-        return widget
-    
     def create_processing_tab(self):
         widget = QWidget()
         scroll = QScrollArea()
@@ -410,12 +370,10 @@ class Sentinel2GUI(QMainWindow):
     def search_scenes(self):
         try:
             aoi = self.aoi_tab.get_aoi()
-            
+
             self.processor = Sentinel2COGProcessor(
                 aoi=aoi,
-                date_start=self.date_start.text(),
-                date_end=self.date_end.text(),
-                cloud_cover_max=self.cloud_cover.value()
+                **self.search_tab.get_search_params(),
             )
             
             self.progress_bar.setVisible(True)

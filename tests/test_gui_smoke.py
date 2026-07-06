@@ -76,7 +76,8 @@ def test_default_aoi(window):
 
 
 def test_search_defaults(window):
-    assert window.cloud_cover.value() == 20.0
+    assert window.search_tab.cloud_cover.value() == 20.0
+    assert window.search_tab.get_search_params()["cloud_cover_max"] == 20.0
 
 
 # -- Processing tab --
