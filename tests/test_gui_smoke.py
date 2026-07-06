@@ -84,13 +84,16 @@ def test_search_defaults(window):
 
 
 def test_index_checkboxes_and_select_clear(window):
-    assert set(window.index_checkboxes) == set(Sentinel2COGProcessor.ALGORITHMS)
+    tab = window.processing_tab
+    assert set(tab.index_checkboxes) == set(Sentinel2COGProcessor.ALGORITHMS)
 
-    window.select_all_indices()
-    assert all(cb.isChecked() for cb in window.index_checkboxes.values())
+    tab.select_all_indices()
+    assert all(cb.isChecked() for cb in tab.index_checkboxes.values())
+    assert set(tab.selected_algorithms()) == set(Sentinel2COGProcessor.ALGORITHMS)
 
-    window.clear_all_indices()
-    assert not any(cb.isChecked() for cb in window.index_checkboxes.values())
+    tab.clear_all_indices()
+    assert not any(cb.isChecked() for cb in tab.index_checkboxes.values())
+    assert tab.selected_algorithms() == []
 
 
 # -- Output tab --
