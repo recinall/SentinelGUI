@@ -109,3 +109,25 @@ def bbox_from_center(
     dlon = (width_km / 2.0) / km_per_deg_lon
 
     return [lon - dlon, lat - dlat, lon + dlon, lat + dlat]
+
+
+def center_from_bbox(bbox: list[float]) -> tuple[float, float, float, float]:
+    """Invert :func:`bbox_from_center`: describe a bbox as a center + window.
+
+    Given ``[min_lon, min_lat, max_lon, max_lat]``, returns
+    ``(lat, lon, width_km, height_km)`` where ``lon``/``lat`` are the midpoint and
+    the km spans use the same latitude-dependent scale as :func:`bbox_from_center`
+    (``width_km = (max_lon - min_lon) * 111.32 * cos(lat)``,
+    ``height_km = (max_lat - min_lat) * 110.574``), so the two are round-trip
+    inverses. Raises :class:`ValueError` if ``bbox`` is not four values.
+    """
+    if len(bbox) != 4:
+        raise ValueError("bbox must be [min_lon, min_lat, max_lon, max_lat]")
+    min_lon, min_lat, max_lon, max_lat = bbox
+
+    lon = (min_lon + max_lon) / 2.0
+    lat = (min_lat + max_lat) / 2.0
+    width_km = (max_lon - min_lon) * _KM_PER_DEG_LON_EQUATOR * cos(radians(lat))
+    height_km = (max_lat - min_lat) * _KM_PER_DEG_LAT
+
+    return lat, lon, width_km, height_km

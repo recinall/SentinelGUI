@@ -4,7 +4,11 @@ import math
 
 import pytest
 
-from sentinelgui.core.geo import bbox_from_center, parse_coordinate
+from sentinelgui.core.geo import (
+    bbox_from_center,
+    center_from_bbox,
+    parse_coordinate,
+)
 
 
 def test_parses_plain_decimal():
@@ -131,3 +135,48 @@ def test_bbox_latitude_span_is_latitude_independent():
 def test_bbox_invalid_inputs_raise(lat, lon, w, h):
     with pytest.raises(ValueError):
         bbox_from_center(lat, lon, w, h)
+
+
+# -- center_from_bbox --
+
+
+def test_center_midpoint_of_default_bbox():
+    lat, lon, _, _ = center_from_bbox([11.0, 46.0, 11.5, 46.5])
+    assert lon == pytest.approx(11.25)
+    assert lat == pytest.approx(46.25)
+
+
+@pytest.mark.parametrize(
+    "lat,lon,w,h",
+    [
+        (0.0, 0.0, 222.64, 221.148),
+        (46.25, 11.25, 10.0, 10.0),
+        (60.0, -120.0, 50.0, 33.0),
+    ],
+)
+def test_round_trip_with_bbox_from_center(lat, lon, w, h):
+    bbox = bbox_from_center(lat, lon, w, h)
+    r_lat, r_lon, r_w, r_h = center_from_bbox(bbox)
+    assert r_lat == pytest.approx(lat)
+    assert r_lon == pytest.approx(lon)
+    assert r_w == pytest.approx(w)
+    assert r_h == pytest.approx(h)
+
+
+def test_center_width_km_shrinks_with_latitude():
+    # Same longitude span in degrees maps to fewer km nearer the pole (cos(lat)).
+    low = center_from_bbox([10.0, 0.0, 12.0, 1.0])
+    high = center_from_bbox([10.0, 60.0, 12.0, 61.0])
+    assert high[2] < low[2]
+
+
+def test_center_height_km_is_latitude_independent():
+    low = center_from_bbox([10.0, 0.0, 11.0, 1.0])
+    high = center_from_bbox([10.0, 60.0, 11.0, 61.0])
+    assert low[3] == pytest.approx(high[3])
+
+
+@pytest.mark.parametrize("bad", [[], [1.0, 2.0, 3.0], [1.0, 2.0, 3.0, 4.0, 5.0]])
+def test_center_from_bbox_wrong_length_raises(bad):
+    with pytest.raises(ValueError):
+        center_from_bbox(bad)
