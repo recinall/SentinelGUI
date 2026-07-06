@@ -1,13 +1,17 @@
 """Characterization tests for BasemapDownloader's slippy-map tile math.
 
-Importing sentinel_gui (to reach BasemapDownloader) pulls in PySide6 at module
-scope; tests/conftest.py sets QT_QPA_PLATFORM=offscreen before this import happens
-so no real display is required. deg2num/num2deg are pure `math` functions and make
-no network calls; download_tile/download_basemap (which do hit the network) are
-intentionally NOT exercised here.
+BasemapDownloader now lives in the Qt-free ``sentinelgui.core.basemap`` module,
+so this import carries no Qt bindings dependency at all. deg2num/num2deg are pure
+`math` functions and make no network calls. download_basemap's orchestration
+(grid math + progress reporting) is covered below with ``download_tile``
+monkeypatched so no real network call ever happens; the real network-hitting
+``download_tile`` itself is intentionally NOT exercised here.
 """
 
-from sentinelgui.sentinel_gui import BasemapDownloader
+import rasterio.transform
+from PIL import Image
+
+from sentinelgui.core.basemap import BasemapDownloader
 
 
 def test_deg2num_known_value_zoom_zero():
@@ -60,3 +64,81 @@ def test_num2deg_matches_expected_nw_corner_zoom_zero():
     lat, lon = BasemapDownloader.num2deg(0, 0, 0)
     assert lon == -180.0
     assert 85.0 < lat < 85.1
+
+
+# --- download_basemap: grid math + progress, with download_tile monkeypatched
+# so no HTTP call ever happens. This bbox/zoom yields a known 2x2 tile grid. ---
+
+_BBOX = (11.0, 46.0, 11.5, 46.5)  # (min_lon, min_lat, max_lon, max_lat)
+_ZOOM = 8
+_COLS, _ROWS = 2, 2
+_TOTAL = _COLS * _ROWS
+
+
+def test_download_basemap_grid_math_and_progress(monkeypatch):
+    def fake_download_tile(x, y, zoom, source='osm'):
+        return Image.new('RGB', (256, 256))
+
+    monkeypatch.setattr(BasemapDownloader, "download_tile", fake_download_tile)
+
+    messages = []
+    result, downloaded, failed, total_tiles = BasemapDownloader.download_basemap(
+        _BBOX, _ZOOM, source='esri', progress=messages.append
+    )
+
+    assert downloaded == _TOTAL
+    assert failed == 0
+    assert total_tiles == _TOTAL
+    assert result.size == (_COLS * 256, _ROWS * 256)
+
+    assert messages[0] == f"Downloading basemap tiles at zoom level {_ZOOM}..."
+    assert messages[1] == "Source: ESRI"
+    assert not any(m.startswith("Aligning to reference:") for m in messages)
+
+
+def test_download_basemap_aligned_progress(monkeypatch):
+    def fake_download_tile(x, y, zoom, source='osm'):
+        return Image.new('RGB', (256, 256))
+
+    monkeypatch.setattr(BasemapDownloader, "download_tile", fake_download_tile)
+
+    min_lon, min_lat, max_lon, max_lat = _BBOX
+    target_width, target_height = 100, 100
+    target_transform = rasterio.transform.from_bounds(
+        min_lon, min_lat, max_lon, max_lat, target_width, target_height
+    )
+
+    messages = []
+    result, downloaded, failed, total_tiles = BasemapDownloader.download_basemap(
+        _BBOX, _ZOOM, source='esri', output_path=None,
+        target_width=target_width, target_height=target_height,
+        target_transform=target_transform, progress=messages.append,
+    )
+
+    assert result.size == (target_width, target_height)
+    assert downloaded == _TOTAL
+    assert failed == 0
+    assert total_tiles == _TOTAL
+    assert (
+        f"Aligning to reference: {target_width}x{target_height} pixels" in messages
+    )
+
+
+def test_download_basemap_counts_failed_tiles(monkeypatch):
+    # x_min, y_min for this bbox/zoom is (135, 90); fail exactly one tile.
+    failing_tile = (136, 91)
+
+    def fake_download_tile(x, y, zoom, source='osm'):
+        if (x, y) == failing_tile:
+            return None
+        return Image.new('RGB', (256, 256))
+
+    monkeypatch.setattr(BasemapDownloader, "download_tile", fake_download_tile)
+
+    _, downloaded, failed, total_tiles = BasemapDownloader.download_basemap(
+        _BBOX, _ZOOM, source='esri'
+    )
+
+    assert total_tiles == _TOTAL
+    assert failed == 1
+    assert downloaded == _TOTAL - 1
