@@ -317,11 +317,18 @@ class Sentinel2COGProcessor:
             'count': 1,
             'driver': 'GTiff',
             'compress': 'lzw',
-            'tiled': True,
-            'blockxsize': 256,
-            'blockysize': 256,
             'interleave': 'band'
         })
+
+        # Only tile when the raster is at least one block in each dimension. A 256-px
+        # tile forced onto a smaller AOI raster produces a padded single-tile GeoTIFF
+        # that some viewers (e.g. GIMP) mis-lay-out into a sheared/"transposed" image.
+        # Falling back to a stripped layout (like the RGB composite) renders correctly.
+        block = 256
+        if data_scaled.shape[0] >= block and data_scaled.shape[1] >= block:
+            profile.update({'tiled': True, 'blockxsize': block, 'blockysize': block})
+        else:
+            profile.update({'tiled': False})
 
         Path(output_path).parent.mkdir(parents=True, exist_ok=True)
 

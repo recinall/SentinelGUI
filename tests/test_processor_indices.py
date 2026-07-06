@@ -299,3 +299,37 @@ def test_colorize_index_colormap_choice_differs_by_algorithm():
     other = processor.colorize_index(data, "NDSI")
 
     assert not np.array_equal(veg, other)
+
+
+# --- save_raster tiling policy ---
+
+
+def test_save_raster_strips_small_rasters_and_tiles_large(tmp_path):
+    import rasterio
+
+    processor = make_processor()
+    profile = {
+        "driver": "GTiff",
+        "dtype": "float32",
+        "width": 148,
+        "height": 114,
+        "count": 1,
+        "crs": "EPSG:32632",
+        "transform": rasterio.transform.from_origin(654294, 5088566, 10, 10),
+    }
+
+    small = np.zeros((114, 148), dtype=np.float32)
+    small_path = tmp_path / "small.tif"
+    processor.save_raster(small, profile, str(small_path), bit_depth=16, scale_range=(-1, 1))
+    with rasterio.open(small_path) as s:
+        # A tile larger than the raster makes GIMP mis-render it; small stays stripped,
+        # so each block spans the full width (strip layout) rather than a 256-px tile.
+        assert s.block_shapes[0][1] == s.width
+        assert s.profile.get("tiled", False) is False
+
+    big = np.zeros((300, 300), dtype=np.float32)
+    big_profile = {**profile, "width": 300, "height": 300}
+    big_path = tmp_path / "big.tif"
+    processor.save_raster(big, big_profile, str(big_path), bit_depth=16, scale_range=(-1, 1))
+    with rasterio.open(big_path) as s:
+        assert s.block_shapes[0] == (256, 256)
