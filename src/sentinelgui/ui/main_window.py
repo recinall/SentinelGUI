@@ -5,7 +5,6 @@ from PySide6.QtCore import QSize, Qt
 from PySide6.QtWidgets import (
     QApplication,
     QGroupBox,
-    QHBoxLayout,
     QMainWindow,
     QMessageBox,
     QProgressBar,
@@ -50,14 +49,14 @@ class Sentinel2GUI(QMainWindow):
 
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
-        
+
         main_layout = QVBoxLayout(central_widget)
-        
+
         splitter = QSplitter(Qt.Vertical)
-        
-        top_widget = QWidget()
-        top_layout = QVBoxLayout(top_widget)
-        
+
+        # Top: two columns — tabs on the left, actions + results on the right.
+        top_splitter = QSplitter(Qt.Horizontal)
+
         self.aoi_tab = AoiTab()
         self.search_tab = SearchTab()
         self.processing_tab = ProcessingTab()
@@ -69,10 +68,9 @@ class Sentinel2GUI(QMainWindow):
         tab_widget.addTab(self.search_tab, "Search Parameters")
         tab_widget.addTab(self.processing_tab, "Processing Options")
         tab_widget.addTab(self.output_tab, "Output Settings")
-        
-        top_layout.addWidget(tab_widget)
-        
-        btn_layout = QHBoxLayout()
+
+        right_widget = QWidget()
+        right_layout = QVBoxLayout(right_widget)
 
         self.search_btn = QPushButton("Search Scenes")
         self.search_btn.clicked.connect(self.search_scenes)
@@ -96,15 +94,10 @@ class Sentinel2GUI(QMainWindow):
         ]
         self._refresh_icons()
 
-        btn_layout.addWidget(self.search_btn)
-        btn_layout.addWidget(self.basemap_btn)
-        btn_layout.addWidget(self.process_btn)
-        
-        top_layout.addLayout(btn_layout)
-        
-        bottom_widget = QWidget()
-        bottom_layout = QVBoxLayout(bottom_widget)
-        
+        right_layout.addWidget(self.search_btn)
+        right_layout.addWidget(self.basemap_btn)
+        right_layout.addWidget(self.process_btn)
+
         results_group = QGroupBox("Search Results")
         results_layout = QVBoxLayout()
 
@@ -114,20 +107,30 @@ class Sentinel2GUI(QMainWindow):
         results_layout.addWidget(self.scene_table)
         results_group.setLayout(results_layout)
 
+        right_layout.addWidget(results_group)
+
+        top_splitter.addWidget(tab_widget)
+        top_splitter.addWidget(right_widget)
+        top_splitter.setStretchFactor(0, 1)
+        top_splitter.setStretchFactor(1, 1)
+
+        # Bottom: log + progress, full width.
+        bottom_widget = QWidget()
+        bottom_layout = QVBoxLayout(bottom_widget)
+
         self.log_panel = LogPanel()
 
         self.progress_bar = QProgressBar()
         self.progress_bar.setVisible(False)
 
-        bottom_layout.addWidget(results_group)
         bottom_layout.addWidget(self.log_panel)
         bottom_layout.addWidget(self.progress_bar)
-        
-        splitter.addWidget(top_widget)
+
+        splitter.addWidget(top_splitter)
         splitter.addWidget(bottom_widget)
-        splitter.setStretchFactor(0, 1)
-        splitter.setStretchFactor(1, 2)
-        
+        splitter.setStretchFactor(0, 3)
+        splitter.setStretchFactor(1, 1)
+
         main_layout.addWidget(splitter)
         
         self.log("Application started. Configure search parameters and click 'Search Scenes'.")
