@@ -113,6 +113,53 @@ def test_aoi_defaults_to_bbox_mode(window):
     assert not window.aoi_tab.center_radio.isChecked()
 
 
+def test_switching_to_center_mirrors_default_bbox(window):
+    tab = window.aoi_tab
+    tab.center_radio.setChecked(True)
+    assert float(tab.center_lat.text()) == pytest.approx(46.25)
+    assert float(tab.center_lon.text()) == pytest.approx(11.25)
+    assert float(tab.width_km.text()) > 0
+    assert float(tab.height_km.text()) > 0
+    # Round-trips through the UI back to the original AOI.
+    min_lon, min_lat, max_lon, max_lat = tab.get_aoi()["bbox"]
+    assert [min_lon, min_lat, max_lon, max_lat] == pytest.approx(
+        [11.0, 46.0, 11.5, 46.5]
+    )
+
+
+def test_switching_to_bbox_mirrors_center_window(window):
+    tab = window.aoi_tab
+    tab.center_radio.setChecked(True)
+    tab.center_lat.setText("0")
+    tab.center_lon.setText("0")
+    tab.width_km.setText("222.64")
+    tab.height_km.setText("221.148")
+    tab.bbox_radio.setChecked(True)
+    assert float(tab.min_lon.text()) == pytest.approx(-1.0)
+    assert float(tab.max_lon.text()) == pytest.approx(1.0)
+    assert float(tab.min_lat.text()) == pytest.approx(-1.0)
+    assert float(tab.max_lat.text()) == pytest.approx(1.0)
+
+
+def test_toggle_with_unparseable_active_input_does_not_crash(window):
+    tab = window.aoi_tab
+    before = (
+        tab.center_lat.text(),
+        tab.center_lon.text(),
+        tab.width_km.text(),
+        tab.height_km.text(),
+    )
+    tab.min_lon.setText("abc")
+    tab.center_radio.setChecked(True)  # must not raise
+    after = (
+        tab.center_lat.text(),
+        tab.center_lon.text(),
+        tab.width_km.text(),
+        tab.height_km.text(),
+    )
+    assert after == before
+
+
 def test_aoi_center_window_mode_computes_bbox(window):
     tab = window.aoi_tab
     tab.center_radio.setChecked(True)

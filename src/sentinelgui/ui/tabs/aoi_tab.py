@@ -23,7 +23,11 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from sentinelgui.core.geo import bbox_from_center, parse_coordinate
+from sentinelgui.core.geo import (
+    bbox_from_center,
+    center_from_bbox,
+    parse_coordinate,
+)
 
 
 class AoiTab(QWidget):
@@ -153,6 +157,53 @@ class AoiTab(QWidget):
     def _on_mode_changed(self, bbox_selected):
         self.bbox_group.setEnabled(bbox_selected)
         self.center_group.setEnabled(not bbox_selected)
+        # Mirror the now-active group's AOI into the disabled one so both always
+        # describe the same area. If the active input is unparseable, leave the
+        # other group untouched rather than crashing the toggle.
+        if bbox_selected:
+            self._fill_bbox_from_center()
+        else:
+            self._fill_center_from_bbox()
+
+    def _fill_center_from_bbox(self):
+        try:
+            min_lon = parse_coordinate(self.min_lon.text())
+            min_lat = parse_coordinate(self.min_lat.text())
+            max_lon = parse_coordinate(self.max_lon.text())
+            max_lat = parse_coordinate(self.max_lat.text())
+        except ValueError:
+            return
+        lat, lon, width_km, height_km = center_from_bbox(
+            [min_lon, min_lat, max_lon, max_lat]
+        )
+        self.center_lat.setText(self._fmt_deg(lat))
+        self.center_lon.setText(self._fmt_deg(lon))
+        self.width_km.setText(self._fmt_km(width_km))
+        self.height_km.setText(self._fmt_km(height_km))
+
+    def _fill_bbox_from_center(self):
+        try:
+            lat = parse_coordinate(self.center_lat.text())
+            lon = parse_coordinate(self.center_lon.text())
+            width_km = float(self.width_km.text().replace(",", "."))
+            height_km = float(self.height_km.text().replace(",", "."))
+            min_lon, min_lat, max_lon, max_lat = bbox_from_center(
+                lat, lon, width_km, height_km
+            )
+        except ValueError:
+            return
+        self.min_lon.setText(self._fmt_deg(min_lon))
+        self.min_lat.setText(self._fmt_deg(min_lat))
+        self.max_lon.setText(self._fmt_deg(max_lon))
+        self.max_lat.setText(self._fmt_deg(max_lat))
+
+    @staticmethod
+    def _fmt_deg(value):
+        return f"{value:.6f}"
+
+    @staticmethod
+    def _fmt_km(value):
+        return f"{value:.4f}"
 
     def browse_geojson(self):
         file_path, _ = QFileDialog.getOpenFileName(
