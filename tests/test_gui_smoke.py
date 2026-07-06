@@ -69,7 +69,7 @@ def test_log_format(window):
 
 
 def test_default_aoi(window):
-    assert window.get_aoi() == {"bbox": [11.0, 46.0, 11.5, 46.5]}
+    assert window.aoi_tab.get_aoi() == {"bbox": [11.0, 46.0, 11.5, 46.5]}
 
 
 # -- Search tab --
