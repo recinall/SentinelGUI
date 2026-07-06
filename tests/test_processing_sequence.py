@@ -23,7 +23,50 @@ against it without behavior drift.
 import numpy as np
 import rasterio
 
+from sentinelgui.core.processor import Sentinel2COGProcessor
 from sentinelgui.sentinel_gui import ProcessingThread
+
+
+def _make_processor():
+    """A real Sentinel2COGProcessor with its network/IO methods faked in-place."""
+    band_urls = {"b04": "https://example.test/b04.tif", "b08": "https://example.test/b08.tif"}
+    fake_profile = {
+        "driver": "GTiff",
+        "dtype": "float32",
+        "width": 4,
+        "height": 3,
+        "count": 1,
+        "crs": "EPSG:4326",
+        "transform": "IDENTITY",
+    }
+
+    processor = Sentinel2COGProcessor(
+        {"bbox": [11.0, 46.0, 11.5, 46.5]}, "2024-06-01", "2024-06-30"
+    )
+
+    def fake_get_scene_assets(scene_index):
+        assert scene_index == 0
+        return band_urls
+
+    def fake_load_band_window(cog_url, bbox, reference_profile=None):
+        return np.zeros((3, 4), dtype=np.float32), fake_profile
+
+    def fake_save_raster(data, profile, output_path, bit_depth=8, scale_range=None):
+        pass
+
+    def fake_calculate_index(algorithm, bands):
+        return np.zeros((3, 4), dtype=np.float32)
+
+    def fake_create_rgb_composite(bands):
+        return np.zeros((3, 3, 4), dtype=np.float32)
+
+    processor.get_scene_assets = fake_get_scene_assets
+    processor.load_band_window = fake_load_band_window
+    processor.save_raster = fake_save_raster
+    processor.calculate_index = fake_calculate_index
+    processor.create_rgb_composite = fake_create_rgb_composite
+
+    return processor
 
 
 class FakeProcessor:
@@ -101,22 +144,23 @@ def _run_thread(processor, task_type, params):
 def test_process_task_emits_exact_progress_sequence(monkeypatch):
     monkeypatch.setattr(rasterio, "open", _FakeRasterioOpen)
 
-    processor = FakeProcessor()
-    params = {
-        "scene_index": 0,
-        "bbox": (11.0, 46.0, 11.5, 46.5),
-        "bands_to_load": {"b04", "b08"},
-        "output": "/tmp/out",
-        "algorithms": ["NDVI"],
-        "save_bands": True,
-        "rgb": True,
-        "bit_depth": 16,
-        "ref_band": "b04",
-    }
+    processor = _make_processor()
 
-    progress_msgs, finished_calls, scene_found_calls = _run_thread(processor, "process", params)
+    msgs = []
+    summary = processor.process_scene(
+        scene_index=0,
+        bbox=(11.0, 46.0, 11.5, 46.5),
+        bands_to_load={"b04", "b08"},
+        output="/tmp/out",
+        algorithms=["NDVI"],
+        save_bands=True,
+        rgb=True,
+        bit_depth=16,
+        ref_band="b04",
+        progress=msgs.append,
+    )
 
-    assert progress_msgs == [
+    assert msgs == [
         "Processing scene 0...",
         "[1/4] Loading b04...",
         "  Using b04 as reference (4x3 pixels)",
@@ -129,10 +173,7 @@ def test_process_task_emits_exact_progress_sequence(monkeypatch):
         "  Saved: /tmp/out_rgb.tif",
     ]
 
-    assert finished_calls == [
-        (True, "Processing complete! Generated 1 indices, 2 bands, 1 RGB composite")
-    ]
-    assert scene_found_calls == []
+    assert summary == "Processing complete! Generated 1 indices, 2 bands, 1 RGB composite"
 
 
 def test_process_task_reference_profile_only_reported_once():
@@ -140,24 +181,25 @@ def test_process_task_reference_profile_only_reported_once():
     # (whichever establishes reference_profile); the second band load must not
     # repeat it, which the exact-sequence assertion above already proves, but this
     # test isolates that single fact for clarity/robustness against reordering.
-    processor = FakeProcessor()
-    params = {
-        "scene_index": 0,
-        "bbox": (11.0, 46.0, 11.5, 46.5),
-        "bands_to_load": {"b04", "b08"},
-        "output": "/tmp/out",
-        "algorithms": [],
-        "save_bands": False,
-        "rgb": False,
-        "bit_depth": 16,
-        "ref_band": "b04",
-    }
+    processor = _make_processor()
 
-    progress_msgs, finished_calls, _ = _run_thread(processor, "process", params)
+    msgs = []
+    summary = processor.process_scene(
+        scene_index=0,
+        bbox=(11.0, 46.0, 11.5, 46.5),
+        bands_to_load={"b04", "b08"},
+        output="/tmp/out",
+        algorithms=[],
+        save_bands=False,
+        rgb=False,
+        bit_depth=16,
+        ref_band="b04",
+        progress=msgs.append,
+    )
 
-    reference_msgs = [m for m in progress_msgs if m.startswith("  Using")]
+    reference_msgs = [m for m in msgs if m.startswith("  Using")]
     assert reference_msgs == ["  Using b04 as reference (4x3 pixels)"]
-    assert finished_calls == [(True, "Processing complete! Generated 0 indices")]
+    assert summary == "Processing complete! Generated 0 indices"
 
 
 def test_search_task_emits_expected_sequence_and_payloads():

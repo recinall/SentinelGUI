@@ -13,6 +13,7 @@ is deliberately left for a later refactor step so behavior stays identical.
 """
 
 import sys
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 
@@ -351,6 +352,93 @@ class Sentinel2COGProcessor:
         rgb_stretched = np.clip((rgb - p2) / (p98 - p2), 0, 1) if p98 > p2 else rgb
 
         return rgb_stretched
+
+    def process_scene(self, scene_index, bbox, bands_to_load, output,
+                      algorithms=None, save_bands=False, rgb=False,
+                      bit_depth=16, ref_band=None,
+                      progress: Callable[[str], None] = lambda _: None) -> str:
+        algorithms = algorithms or []
+
+        progress(f"Processing scene {scene_index}...")
+        band_urls = self.get_scene_assets(scene_index)
+
+        loaded_bands = {}
+        reference_profile = None
+
+        bands_order = sorted(bands_to_load)
+        if ref_band and ref_band in bands_to_load:
+            bands_order.remove(ref_band)
+            bands_order.insert(0, ref_band)
+
+        total_steps = len(bands_order) + len(algorithms) + (1 if rgb else 0)
+        current_step = 0
+
+        for band in bands_order:
+            if band not in band_urls:
+                progress(f"Warning: Band {band} not available")
+                continue
+
+            current_step += 1
+            progress(f"[{current_step}/{total_steps}] Loading {band}...")
+
+            data, band_profile = self.load_band_window(
+                band_urls[band],
+                bbox,
+                reference_profile=reference_profile
+            )
+
+            loaded_bands[band] = data
+
+            if reference_profile is None:
+                reference_profile = band_profile
+                progress(f"  Using {band} as reference ({data.shape[1]}x{data.shape[0]} pixels)")
+
+            if save_bands:
+                output_path = f"{output}_band_{band}.tif"
+                self.save_raster(data, reference_profile, output_path,
+                                 bit_depth=bit_depth, scale_range=(0,1))
+                progress(f"  Saved: {output_path}")
+
+        for algorithm in algorithms:
+            current_step += 1
+            progress(f"[{current_step}/{total_steps}] Calculating {algorithm}...")
+
+            try:
+                index_data = self.calculate_index(algorithm, loaded_bands)
+                output_path = f"{output}_{algorithm.lower()}.tif"
+                self.save_raster(index_data, reference_profile, output_path,
+                                 bit_depth=bit_depth, scale_range=(-1, 1))
+                progress(f"  Saved: {output_path}")
+            except Exception as e:
+                progress(f"  Error calculating {algorithm}: {str(e)}")
+
+        if rgb:
+            current_step += 1
+            progress(f"[{current_step}/{total_steps}] Creating RGB composite...")
+
+            rgb_data = self.create_rgb_composite(loaded_bands)
+            output_path = f"{output}_rgb.tif"
+
+            rgb_8bit = (rgb_data * 255).astype('uint8')
+            rgb_profile = reference_profile.copy()
+            rgb_profile.update({
+                'dtype': 'uint8',
+                'count': 3,
+                'photometric': 'RGB'
+            })
+
+            with rasterio.open(output_path, 'w', **rgb_profile) as dst:
+                dst.write(rgb_8bit)
+
+            progress(f"  Saved: {output_path}")
+
+        summary = f"Processing complete! Generated {len(algorithms)} indices"
+        if save_bands:
+            summary += f", {len(loaded_bands)} bands"
+        if rgb:
+            summary += ", 1 RGB composite"
+
+        return summary
 
     def visualize_index(self, index_data: np.ndarray, algorithm: str,
                         mode: str = 'gradient', class_breaks: list[float] = None):
