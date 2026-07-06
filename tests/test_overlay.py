@@ -1,20 +1,16 @@
-"""Characterization tests for create_overlay.py (hex_to_rgba + create_overlay).
+"""Characterization tests for ``core.overlay`` (hex_to_rgba + create_overlay).
 
-These tests freeze the CURRENT, observable behavior of the overlay-generation logic
+These tests freeze the observable behavior of the overlay-generation logic
 (colormap/normalization math, alpha compositing, degenerate branches, and error
-handling) using small hand-built in-memory PIL images, so a future move of this
-code into core/overlay.py cannot silently change semantics.
+handling) using small hand-built in-memory PIL images, so refactors cannot
+silently change semantics.
 
 No network calls and no real disk I/O are performed:
-- `PIL.Image.open` is monkeypatched (via `sentinelgui.create_overlay.Image.open`,
-  which is the *same object* as `PIL.Image.open` since create_overlay.py does
-  `from PIL import Image`) to return pre-built in-memory images instead of reading
-  from `rgb_path` / `index_path`.
+- `PIL.Image.open` is monkeypatched (via `co.Image.open`, which is the *same object*
+  as `PIL.Image.open` since `core/overlay.py` does `from PIL import Image`) to return
+  pre-built in-memory images instead of reading from `rgb_path` / `index_path`.
 - `PIL.Image.Image.save` is monkeypatched (via `co.Image.Image.save`) to record the
   final image's array/mode instead of writing `output_path` to disk.
-
-These are the two seams the next agent must preserve when this logic moves under
-`core/overlay.py`.
 """
 
 from __future__ import annotations
