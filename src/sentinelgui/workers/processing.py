@@ -23,18 +23,7 @@ class ProcessingWorker(QThread):
                 self.finished.emit(True, f"Found {len(scenes)} scenes")
 
             elif self.task_type == "process":
-                summary = self.processor.process_scene(
-                    scene_index=self.params['scene_index'],
-                    bbox=self.params['bbox'],
-                    bands_to_load=self.params['bands_to_load'],
-                    output=self.params['output'],
-                    algorithms=self.params.get('algorithms', []),
-                    save_bands=self.params.get('save_bands', False),
-                    rgb=self.params.get('rgb', False),
-                    bit_depth=self.params.get('bit_depth', 16),
-                    ref_band=self.params.get('ref_band'),
-                    progress=self.progress.emit,
-                )
+                summary = self.processor.process_scene(self.params, progress=self.progress.emit)
                 self.finished.emit(True, summary)
 
         except Exception as e:

@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QFont, QIcon
 import json
+from sentinelgui.core.models import ProcessingParams
 from sentinelgui.core.processor import Sentinel2COGProcessor
 from sentinelgui.workers.basemap import BasemapWorker
 from sentinelgui.workers.processing import ProcessingWorker
@@ -597,17 +598,17 @@ class Sentinel2GUI(QMainWindow):
             
             bbox = self.processor.get_bbox_from_aoi()
             
-            params = {
-                'scene_index': scene_index,
-                'bbox': bbox,
-                'bands_to_load': bands_to_load,
-                'output': str(output_base),
-                'algorithms': algorithms,
-                'save_bands': self.save_bands_cb.isChecked(),
-                'rgb': self.rgb_cb.isChecked(),
-                'bit_depth': self.bit_depth.currentData(),
-                'ref_band': self.ref_band_combo.currentData()
-            }
+            params = ProcessingParams(
+                scene_index=scene_index,
+                bbox=bbox,
+                bands_to_load=bands_to_load,
+                output=str(output_base),
+                algorithms=algorithms,
+                save_bands=self.save_bands_cb.isChecked(),
+                rgb=self.rgb_cb.isChecked(),
+                bit_depth=self.bit_depth.currentData(),
+                ref_band=self.ref_band_combo.currentData(),
+            )
             
             self.log(f"Starting processing with {len(algorithms)} indices and {len(bands_to_load)} bands...")
             if algorithms:

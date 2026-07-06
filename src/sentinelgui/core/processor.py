@@ -31,6 +31,7 @@ from rasterio.warp import (
 from shapely.geometry import shape
 
 from sentinelgui.core.indices import ALGORITHMS, BAND_MAPPING
+from sentinelgui.core.models import ProcessingParams
 
 
 class Sentinel2COGProcessor:
@@ -353,11 +354,17 @@ class Sentinel2COGProcessor:
 
         return rgb_stretched
 
-    def process_scene(self, scene_index, bbox, bands_to_load, output,
-                      algorithms=None, save_bands=False, rgb=False,
-                      bit_depth=16, ref_band=None,
+    def process_scene(self, params: ProcessingParams,
                       progress: Callable[[str], None] = lambda _: None) -> str:
-        algorithms = algorithms or []
+        scene_index = params.scene_index
+        bbox = params.bbox
+        bands_to_load = params.bands_to_load
+        output = params.output
+        algorithms = params.algorithms or []
+        save_bands = params.save_bands
+        rgb = params.rgb
+        bit_depth = params.bit_depth
+        ref_band = params.ref_band
 
         progress(f"Processing scene {scene_index}...")
         band_urls = self.get_scene_assets(scene_index)

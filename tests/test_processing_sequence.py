@@ -24,6 +24,7 @@ against it without behavior drift.
 import numpy as np
 import rasterio
 
+from sentinelgui.core.models import ProcessingParams
 from sentinelgui.core.processor import Sentinel2COGProcessor
 from sentinelgui.workers.processing import ProcessingWorker
 
@@ -149,15 +150,17 @@ def test_process_task_emits_exact_progress_sequence(monkeypatch):
 
     msgs = []
     summary = processor.process_scene(
-        scene_index=0,
-        bbox=(11.0, 46.0, 11.5, 46.5),
-        bands_to_load={"b04", "b08"},
-        output="/tmp/out",
-        algorithms=["NDVI"],
-        save_bands=True,
-        rgb=True,
-        bit_depth=16,
-        ref_band="b04",
+        ProcessingParams(
+            scene_index=0,
+            bbox=(11.0, 46.0, 11.5, 46.5),
+            bands_to_load={"b04", "b08"},
+            output="/tmp/out",
+            algorithms=["NDVI"],
+            save_bands=True,
+            rgb=True,
+            bit_depth=16,
+            ref_band="b04",
+        ),
         progress=msgs.append,
     )
 
@@ -186,15 +189,17 @@ def test_process_task_reference_profile_only_reported_once():
 
     msgs = []
     summary = processor.process_scene(
-        scene_index=0,
-        bbox=(11.0, 46.0, 11.5, 46.5),
-        bands_to_load={"b04", "b08"},
-        output="/tmp/out",
-        algorithms=[],
-        save_bands=False,
-        rgb=False,
-        bit_depth=16,
-        ref_band="b04",
+        ProcessingParams(
+            scene_index=0,
+            bbox=(11.0, 46.0, 11.5, 46.5),
+            bands_to_load={"b04", "b08"},
+            output="/tmp/out",
+            algorithms=[],
+            save_bands=False,
+            rgb=False,
+            bit_depth=16,
+            ref_band="b04",
+        ),
         progress=msgs.append,
     )
 
@@ -218,17 +223,17 @@ def test_process_task_full_dict_via_worker_emits_exact_progress_sequence(monkeyp
 
     processor = _make_processor()
 
-    params = {
-        "scene_index": 0,
-        "bbox": (11.0, 46.0, 11.5, 46.5),
-        "bands_to_load": {"b04", "b08"},
-        "output": "/tmp/out",
-        "algorithms": ["NDVI"],
-        "save_bands": True,
-        "rgb": True,
-        "bit_depth": 16,
-        "ref_band": "b04",
-    }
+    params = ProcessingParams(
+        scene_index=0,
+        bbox=(11.0, 46.0, 11.5, 46.5),
+        bands_to_load={"b04", "b08"},
+        output="/tmp/out",
+        algorithms=["NDVI"],
+        save_bands=True,
+        rgb=True,
+        bit_depth=16,
+        ref_band="b04",
+    )
 
     progress_msgs, finished_calls, scene_found_calls = _run_thread(processor, "process", params)
 
@@ -251,26 +256,26 @@ def test_process_task_full_dict_via_worker_emits_exact_progress_sequence(monkeyp
     assert scene_found_calls == []
 
 
-def test_process_task_minimal_dict_via_worker_uses_get_defaults(monkeypatch):
-    """Freezes the ``.get(key, default)`` fallbacks on ``ProcessingWorker``'s "process"
-    branch ahead of the planned ``ProcessingParams`` dataclass migration.
+def test_process_task_minimal_dict_via_worker_uses_dataclass_defaults(monkeypatch):
+    """Freezes the omitted-field defaults on ``ProcessingWorker``'s "process" branch,
+    which now come from the ``ProcessingParams`` dataclass.
 
-    Only the required keys (``scene_index``, ``bbox``, ``bands_to_load``, ``output``)
-    are present in ``params``; ``algorithms``, ``save_bands``, ``rgb``, ``bit_depth``,
-    and ``ref_band`` are omitted entirely so the worker's defaults
-    (``[]``, ``False``, ``False``, ``16``, ``None``) are exercised, exactly as they
-    are today.
+    Only the required fields (``scene_index``, ``bbox``, ``bands_to_load``, ``output``)
+    are supplied; ``algorithms``, ``save_bands``, ``rgb``, ``bit_depth``, and
+    ``ref_band`` are omitted entirely so the ``ProcessingParams`` defaults
+    (``[]``, ``False``, ``False``, ``16``, ``None``) are exercised, exactly as the
+    worker's ``.get(...)`` fallbacks did before.
     """
     monkeypatch.setattr(rasterio, "open", _FakeRasterioOpen)
 
     processor = _make_processor()
 
-    params = {
-        "scene_index": 0,
-        "bbox": (11.0, 46.0, 11.5, 46.5),
-        "bands_to_load": {"b04", "b08"},
-        "output": "/tmp/out",
-    }
+    params = ProcessingParams(
+        scene_index=0,
+        bbox=(11.0, 46.0, 11.5, 46.5),
+        bands_to_load={"b04", "b08"},
+        output="/tmp/out",
+    )
 
     progress_msgs, finished_calls, scene_found_calls = _run_thread(processor, "process", params)
 
