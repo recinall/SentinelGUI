@@ -203,6 +203,91 @@ def test_process_task_reference_profile_only_reported_once():
     assert summary == "Processing complete! Generated 0 indices"
 
 
+def test_process_task_full_dict_via_worker_emits_exact_progress_sequence(monkeypatch):
+    """Freezes the CURRENT dict-based ``ProcessingWorker`` "process" branch contract,
+    ahead of the planned ``ProcessingParams`` dataclass migration.
+
+    Drives ``ProcessingWorker.run()`` (not ``process_scene`` directly) with a fully
+    populated ``params`` dict, so every ``params[...]``/``params.get(...)`` access on
+    the worker's "process" branch is exercised through the real worker object. This
+    must keep producing the exact same progress sequence and finished payload as the
+    existing direct-call test (``test_process_task_emits_exact_progress_sequence``)
+    for the same effective arguments.
+    """
+    monkeypatch.setattr(rasterio, "open", _FakeRasterioOpen)
+
+    processor = _make_processor()
+
+    params = {
+        "scene_index": 0,
+        "bbox": (11.0, 46.0, 11.5, 46.5),
+        "bands_to_load": {"b04", "b08"},
+        "output": "/tmp/out",
+        "algorithms": ["NDVI"],
+        "save_bands": True,
+        "rgb": True,
+        "bit_depth": 16,
+        "ref_band": "b04",
+    }
+
+    progress_msgs, finished_calls, scene_found_calls = _run_thread(processor, "process", params)
+
+    assert progress_msgs == [
+        "Processing scene 0...",
+        "[1/4] Loading b04...",
+        "  Using b04 as reference (4x3 pixels)",
+        "  Saved: /tmp/out_band_b04.tif",
+        "[2/4] Loading b08...",
+        "  Saved: /tmp/out_band_b08.tif",
+        "[3/4] Calculating NDVI...",
+        "  Saved: /tmp/out_ndvi.tif",
+        "[4/4] Creating RGB composite...",
+        "  Saved: /tmp/out_rgb.tif",
+    ]
+
+    assert finished_calls == [
+        (True, "Processing complete! Generated 1 indices, 2 bands, 1 RGB composite")
+    ]
+    assert scene_found_calls == []
+
+
+def test_process_task_minimal_dict_via_worker_uses_get_defaults(monkeypatch):
+    """Freezes the ``.get(key, default)`` fallbacks on ``ProcessingWorker``'s "process"
+    branch ahead of the planned ``ProcessingParams`` dataclass migration.
+
+    Only the required keys (``scene_index``, ``bbox``, ``bands_to_load``, ``output``)
+    are present in ``params``; ``algorithms``, ``save_bands``, ``rgb``, ``bit_depth``,
+    and ``ref_band`` are omitted entirely so the worker's defaults
+    (``[]``, ``False``, ``False``, ``16``, ``None``) are exercised, exactly as they
+    are today.
+    """
+    monkeypatch.setattr(rasterio, "open", _FakeRasterioOpen)
+
+    processor = _make_processor()
+
+    params = {
+        "scene_index": 0,
+        "bbox": (11.0, 46.0, 11.5, 46.5),
+        "bands_to_load": {"b04", "b08"},
+        "output": "/tmp/out",
+    }
+
+    progress_msgs, finished_calls, scene_found_calls = _run_thread(processor, "process", params)
+
+    assert progress_msgs == [
+        "Processing scene 0...",
+        "[1/2] Loading b04...",
+        "  Using b04 as reference (4x3 pixels)",
+        "[2/2] Loading b08...",
+    ]
+    assert not any(m.startswith("[") and "Calculating" in m for m in progress_msgs)
+    assert not any("Creating RGB composite" in m for m in progress_msgs)
+    assert not any(m.startswith("  Saved:") for m in progress_msgs)
+
+    assert finished_calls == [(True, "Processing complete! Generated 0 indices")]
+    assert scene_found_calls == []
+
+
 def test_search_task_emits_expected_sequence_and_payloads():
     processor = FakeProcessor()
 
