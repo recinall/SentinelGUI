@@ -354,6 +354,47 @@ class Sentinel2COGProcessor:
 
         return rgb_stretched
 
+    def colorize_index(self, index_data: np.ndarray, algorithm: str) -> np.ndarray:
+        """Map an index array in [-1, 1] to an 8-bit RGB cube for display.
+
+        Uses the same colormap choice as :meth:`visualize_index` (``RdYlGn`` for the
+        vegetation/water indices, ``RdYlBu_r`` otherwise). Returns a ``(3, H, W)``
+        ``uint8`` array so it can be written as a plain 3-band RGB GeoTIFF — the format
+        every image viewer renders, unlike the raw single-band index raster.
+        """
+        gradient_algos = ['NDVI', 'NDWI', 'SAVI', 'EVI', 'NDRE', 'GNDVI', 'IISV']
+        cmap_name = 'RdYlGn' if algorithm in gradient_algos else 'RdYlBu_r'
+
+        normed = (np.clip(index_data, -1.0, 1.0) + 1.0) / 2.0
+        rgba = plt.get_cmap(cmap_name)(normed)
+        rgb = (rgba[..., :3] * 255).astype('uint8')
+
+        return np.transpose(rgb, (2, 0, 1))
+
+    def save_index_color(self, index_data: np.ndarray, profile: dict,
+                         output_path: str, algorithm: str):
+        """Write a colorized 8-bit RGB companion to a raw index raster.
+
+        The raw ``*_{index}.tif`` stays the scientific single-band raster; this writes
+        a ``*_{index}_color.tif`` with the same georeferencing but as a stripped 3-band
+        RGB image — byte-for-byte the same profile shape as the working RGB composite,
+        so it displays correctly in basic viewers.
+        """
+        rgb = self.colorize_index(index_data, algorithm)
+
+        color_profile = profile.copy()
+        color_profile.update({
+            'dtype': 'uint8',
+            'count': 3,
+            'photometric': 'RGB',
+        })
+
+        output_path = str(output_path)
+        Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+
+        with rasterio.open(output_path, 'w', **color_profile) as dst:
+            dst.write(rgb)
+
     def process_scene(self, params: ProcessingParams,
                       progress: Callable[[str], None] = lambda _: None) -> str:
         scene_index = params.scene_index
@@ -416,6 +457,10 @@ class Sentinel2COGProcessor:
                 self.save_raster(index_data, reference_profile, output_path,
                                  bit_depth=bit_depth, scale_range=(-1, 1))
                 progress(f"  Saved: {output_path}")
+
+                color_path = f"{output}_{algorithm.lower()}_color.tif"
+                self.save_index_color(index_data, reference_profile, color_path, algorithm)
+                progress(f"  Saved: {color_path}")
             except Exception as e:
                 progress(f"  Error calculating {algorithm}: {str(e)}")
 

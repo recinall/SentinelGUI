@@ -266,3 +266,36 @@ def test_normalize_to_reflectance_uint16_uint8_and_float_branches():
     result_float = processor.normalize_to_reflectance(raw_float, "float32")
     np.testing.assert_allclose(result_float, raw_float, rtol=1e-6)
     assert result_float is raw_float  # float branch is a passthrough, not a copy
+
+
+# --- colorize_index (viewer-friendly companion) ---
+
+
+def test_colorize_index_shape_dtype_and_direction():
+    # A left->right ramp from -1 to +1; RdYlGn maps low->red, high->green, so the
+    # +1 end must be greener (higher G, lower R) than the -1 end. This proves the
+    # colorized companion is an ordinary 8-bit RGB cube, correctly oriented.
+    processor = make_processor()
+    ramp = np.tile(np.linspace(-1.0, 1.0, 5, dtype=np.float32), (3, 1))  # (3, 5)
+
+    rgb = processor.colorize_index(ramp, "NDVI")
+
+    assert rgb.shape == (3, 3, 5)  # (bands, H, W)
+    assert rgb.dtype == np.uint8
+
+    low = rgb[:, 0, 0]   # NDVI = -1  -> red end
+    high = rgb[:, 0, -1]  # NDVI = +1 -> green end
+    assert high[1] > low[1]  # greener
+    assert low[0] > high[0]  # redder at the low end
+
+
+def test_colorize_index_colormap_choice_differs_by_algorithm():
+    # Gradient (vegetation) indices use RdYlGn; the others use RdYlBu_r. The two
+    # colormaps disagree at the extremes, so the same value colorizes differently.
+    processor = make_processor()
+    data = np.full((2, 2), 0.9, dtype=np.float32)
+
+    veg = processor.colorize_index(data, "NDVI")
+    other = processor.colorize_index(data, "NDSI")
+
+    assert not np.array_equal(veg, other)

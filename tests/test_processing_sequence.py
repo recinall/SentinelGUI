@@ -173,6 +173,7 @@ def test_process_task_emits_exact_progress_sequence(monkeypatch):
         "  Saved: /tmp/out_band_b08.tif",
         "[3/4] Calculating NDVI...",
         "  Saved: /tmp/out_ndvi.tif",
+        "  Saved: /tmp/out_ndvi_color.tif",
         "[4/4] Creating RGB composite...",
         "  Saved: /tmp/out_rgb.tif",
     ]
@@ -247,6 +248,7 @@ def test_process_task_via_worker_emits_exact_progress_sequence(monkeypatch):
         "  Saved: /tmp/out_band_b08.tif",
         "[3/4] Calculating NDVI...",
         "  Saved: /tmp/out_ndvi.tif",
+        "  Saved: /tmp/out_ndvi_color.tif",
         "[4/4] Creating RGB composite...",
         "  Saved: /tmp/out_rgb.tif",
     ]
