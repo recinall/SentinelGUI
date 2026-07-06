@@ -81,7 +81,6 @@ class Sentinel2GUI(QMainWindow):
         self.basemap_btn.clicked.connect(self.download_basemap)
         self.basemap_btn.setMinimumHeight(40)
         self.basemap_btn.setObjectName("accent")
-        self.basemap_btn.setStyleSheet("background-color: #4CAF50; color: white;")
         
         self.process_btn = QPushButton("⚙️ Process Selected Scene")
         self.process_btn.clicked.connect(self.process_scene)

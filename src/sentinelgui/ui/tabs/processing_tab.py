@@ -8,10 +8,11 @@ stays ignorant of core. The Select/Clear-All buttons live here and report their 
 through the :attr:`log_requested` signal (the controller connects it to its log panel),
 preserving the exact log lines the monolith emitted.
 
-Lifted verbatim from the ``create_processing_tab`` builder and the
+Lifted from the ``create_processing_tab`` builder and the
 ``select_all_indices``/``clear_all_indices`` methods of the old ``Sentinel2GUI``.
-Inline styles (``#666``/``#999``) ride along unchanged; removing them belongs to the
-theme slice.
+Visual styling carries no inline literals: the info/description/band labels are tagged
+``role="hint"``/``"caption"`` and the index checkboxes ``role="index"`` so the theme's
+QSS (see :mod:`sentinelgui.ui.theme`) supplies every color and weight.
 """
 
 from PySide6.QtCore import Signal
@@ -47,7 +48,6 @@ class ProcessingTab(QScrollArea):
 
         info_label = QLabel("Select one or more spectral indices to calculate:")
         info_label.setProperty("role", "hint")
-        info_label.setStyleSheet("color: #666; font-style: italic;")
         indices_layout.addWidget(info_label)
 
         self.index_checkboxes = {}
@@ -77,18 +77,15 @@ class ProcessingTab(QScrollArea):
             cb_layout = QVBoxLayout()
             cb = QCheckBox(algo_key)
             cb.setProperty("role", "index")
-            cb.setStyleSheet("font-weight: bold;")
 
             desc_label = QLabel(index_descriptions.get(algo_key, ""))
             desc_label.setProperty("role", "caption")
-            desc_label.setStyleSheet("color: #666; font-size: 10px; margin-left: 20px;")
             desc_label.setWordWrap(True)
 
             bands_label = QLabel(
                 f"Required bands: {', '.join([b.upper() for b in algo_info['bands']])}"
             )
             bands_label.setProperty("role", "caption")
-            bands_label.setStyleSheet("color: #999; font-size: 9px; margin-left: 20px;")
 
             cb_layout.addWidget(cb)
             cb_layout.addWidget(desc_label)
@@ -121,7 +118,6 @@ class ProcessingTab(QScrollArea):
 
         band_info = QLabel("Select individual bands to save (optional):")
         band_info.setProperty("role", "hint")
-        band_info.setStyleSheet("color: #666; font-style: italic;")
         bands_layout.addWidget(band_info)
 
         self.band_checkboxes = {}

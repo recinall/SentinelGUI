@@ -4,9 +4,10 @@ Owns the output directory + file prefix, the bit-depth selector, and the basemap
 source/zoom controls. Exposes them to the controller through small getters
 (``output_dir``, ``file_prefix``, ``bit_depth``, ``basemap_source``, ``basemap_zoom``);
 the underlying widgets are stored under role-suffixed attribute names so they don't
-shadow the getters. Lifted verbatim from the ``create_output_tab`` builder and the
-``browse_output`` method of the old ``Sentinel2GUI``; defaults, ranges and the inline
-``#666``/``#999`` styles (theme-slice cleanup) are unchanged.
+shadow the getters. Lifted from the ``create_output_tab`` builder and the
+``browse_output`` method of the old ``Sentinel2GUI``; defaults and ranges are unchanged.
+The helper labels carry no inline literals — they are tagged ``role="hint"``/``"caption"``
+so the theme's QSS (see :mod:`sentinelgui.ui.theme`) supplies their color and size.
 """
 
 from pathlib import Path
@@ -54,7 +55,6 @@ class OutputTab(QWidget):
 
         prefix_info = QLabel("Output files will be named: prefix_ndvi.tif, prefix_ndwi.tif, etc.")
         prefix_info.setProperty("role", "caption")
-        prefix_info.setStyleSheet("color: #666; font-size: 10px;")
 
         prefix_layout.addWidget(self.file_prefix_edit)
         prefix_layout.addWidget(prefix_info)
@@ -79,7 +79,6 @@ class OutputTab(QWidget):
 
         basemap_info = QLabel("High-resolution reference imagery (non-radiometric)")
         basemap_info.setProperty("role", "hint")
-        basemap_info.setStyleSheet("color: #666; font-style: italic;")
         basemap_layout.addWidget(basemap_info)
 
         source_layout = QHBoxLayout()
@@ -103,7 +102,6 @@ class OutputTab(QWidget):
 
         zoom_info = QLabel("Recommended: 14-16 for cities, 12-14 for rural areas")
         zoom_info.setProperty("role", "caption")
-        zoom_info.setStyleSheet("color: #999; font-size: 10px;")
         zoom_layout.addWidget(zoom_info)
         zoom_layout.addStretch()
 
