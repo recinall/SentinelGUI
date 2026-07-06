@@ -37,6 +37,8 @@ dist/
 *.spec.bak
 *.manifest
 *.toc
+# generated launcher icons (regenerated from resources/icon.png by make_icons.py)
+packaging/build-icons/
 
 # ======================
 # IDE / Editor
