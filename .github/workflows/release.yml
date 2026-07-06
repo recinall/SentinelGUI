@@ -103,7 +103,7 @@ jobs:
         with:
           name: SentinelGUI-installer-${{ matrix.os }}
           path: |
-            dist/*.AppImage
+            dist/SentinelGUI*.AppImage
             dist/*.dmg
             dist/SentinelGUI-Setup.exe
           if-no-files-found: ignore
@@ -120,7 +120,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            dist/*.AppImage
+            dist/SentinelGUI*.AppImage
             dist/*.dmg
             dist/SentinelGUI-Setup.exe
           fail_on_unmatched_files: false

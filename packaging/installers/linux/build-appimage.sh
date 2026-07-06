@@ -34,7 +34,11 @@ cp "${ICON_SRC}" "${APPDIR}/sentinelgui.png"
 cp "${DESKTOP_SRC}" "${APPDIR}/sentinelgui.desktop"
 
 # --- fetch linuxdeploy if needed --------------------------------------------
-LINUXDEPLOY="${REPO_ROOT}/dist/linuxdeploy-x86_64.AppImage"
+# Keep the tool OUT of dist/ so it is never picked up by the release globs
+# (dist/*.AppImage) as a stray asset alongside our own AppImage.
+TOOLS="${REPO_ROOT}/build-tools"
+mkdir -p "${TOOLS}"
+LINUXDEPLOY="${TOOLS}/linuxdeploy-x86_64.AppImage"
 if ! command -v linuxdeploy >/dev/null 2>&1 && [[ ! -x "${LINUXDEPLOY}" ]]; then
   echo "downloading linuxdeploy..."
   curl -fsSL -o "${LINUXDEPLOY}" \
