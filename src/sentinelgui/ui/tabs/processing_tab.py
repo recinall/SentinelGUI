@@ -46,6 +46,7 @@ class ProcessingTab(QScrollArea):
         indices_layout = QVBoxLayout()
 
         info_label = QLabel("Select one or more spectral indices to calculate:")
+        info_label.setProperty("role", "hint")
         info_label.setStyleSheet("color: #666; font-style: italic;")
         indices_layout.addWidget(info_label)
 
@@ -75,15 +76,18 @@ class ProcessingTab(QScrollArea):
 
             cb_layout = QVBoxLayout()
             cb = QCheckBox(algo_key)
+            cb.setProperty("role", "index")
             cb.setStyleSheet("font-weight: bold;")
 
             desc_label = QLabel(index_descriptions.get(algo_key, ""))
+            desc_label.setProperty("role", "caption")
             desc_label.setStyleSheet("color: #666; font-size: 10px; margin-left: 20px;")
             desc_label.setWordWrap(True)
 
             bands_label = QLabel(
                 f"Required bands: {', '.join([b.upper() for b in algo_info['bands']])}"
             )
+            bands_label.setProperty("role", "caption")
             bands_label.setStyleSheet("color: #999; font-size: 9px; margin-left: 20px;")
 
             cb_layout.addWidget(cb)
@@ -116,6 +120,7 @@ class ProcessingTab(QScrollArea):
         bands_layout = QVBoxLayout()
 
         band_info = QLabel("Select individual bands to save (optional):")
+        band_info.setProperty("role", "hint")
         band_info.setStyleSheet("color: #666; font-style: italic;")
         bands_layout.addWidget(band_info)
 

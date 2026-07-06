@@ -53,6 +53,7 @@ class OutputTab(QWidget):
         self.file_prefix_edit.setPlaceholderText("Prefix for output files...")
 
         prefix_info = QLabel("Output files will be named: prefix_ndvi.tif, prefix_ndwi.tif, etc.")
+        prefix_info.setProperty("role", "caption")
         prefix_info.setStyleSheet("color: #666; font-size: 10px;")
 
         prefix_layout.addWidget(self.file_prefix_edit)
@@ -77,6 +78,7 @@ class OutputTab(QWidget):
         basemap_layout = QVBoxLayout()
 
         basemap_info = QLabel("High-resolution reference imagery (non-radiometric)")
+        basemap_info.setProperty("role", "hint")
         basemap_info.setStyleSheet("color: #666; font-style: italic;")
         basemap_layout.addWidget(basemap_info)
 
@@ -100,6 +102,7 @@ class OutputTab(QWidget):
         zoom_layout.addWidget(self.basemap_zoom_spin)
 
         zoom_info = QLabel("Recommended: 14-16 for cities, 12-14 for rural areas")
+        zoom_info.setProperty("role", "caption")
         zoom_info.setStyleSheet("color: #999; font-size: 10px;")
         zoom_layout.addWidget(zoom_info)
         zoom_layout.addStretch()
