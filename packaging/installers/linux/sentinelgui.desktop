@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=SentinelGUI
+GenericName=Sentinel-2 Imagery Tool
+Comment=Search, download and process Sentinel-2 COG imagery
+Exec=SentinelGUI
+Icon=sentinelgui
+Terminal=false
+Categories=Science;Graphics;
