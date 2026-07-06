@@ -61,7 +61,7 @@ def test_action_buttons_initial_state(window):
 
 def test_log_format(window):
     window.log("hello smoke")
-    lines = window.log_text.toPlainText().splitlines()
+    lines = window.log_panel.log_text.toPlainText().splitlines()
     assert re.fullmatch(r"\[\d{2}:\d{2}:\d{2}\] hello smoke", lines[-1])
 
 

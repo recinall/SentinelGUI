@@ -1,24 +1,34 @@
+import json
 import sys
 from pathlib import Path
-from datetime import datetime, timedelta
-from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
-                               QHBoxLayout, QGroupBox, QLabel, QLineEdit, QPushButton,
-                               QComboBox, QCheckBox, QSpinBox, QDoubleSpinBox, QTextEdit,
-                               QFileDialog, QTabWidget, QTableWidget, QTableWidgetItem,
-                               QProgressBar, QMessageBox, QSplitter, QHeaderView, QScrollArea)
-from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QFont, QIcon
-import json
+
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import (
+    QApplication,
+    QGroupBox,
+    QHBoxLayout,
+    QMainWindow,
+    QMessageBox,
+    QProgressBar,
+    QPushButton,
+    QSplitter,
+    QTabWidget,
+    QVBoxLayout,
+    QWidget,
+)
+from rasterio.crs import CRS
+
 from sentinelgui.core.models import ProcessingParams
 from sentinelgui.core.processor import Sentinel2COGProcessor
 from sentinelgui.ui.tabs.aoi_tab import AoiTab
 from sentinelgui.ui.tabs.output_tab import OutputTab
 from sentinelgui.ui.tabs.processing_tab import ProcessingTab
 from sentinelgui.ui.tabs.search_tab import SearchTab
+from sentinelgui.ui.widgets.log_panel import LogPanel
+from sentinelgui.ui.widgets.scene_table import SceneTable
 from sentinelgui.workers.basemap import BasemapWorker
 from sentinelgui.workers.processing import ProcessingWorker
 from sentinelgui.workers.search import SearchWorker
-from rasterio.crs import CRS
 
 
 class Sentinel2GUI(QMainWindow):
@@ -86,35 +96,20 @@ class Sentinel2GUI(QMainWindow):
         
         results_group = QGroupBox("Search Results")
         results_layout = QVBoxLayout()
-        
-        self.scene_table = QTableWidget()
-        self.scene_table.setColumnCount(6)
-        self.scene_table.setHorizontalHeaderLabels([
-            "Index", "Date/Time", "Cloud Cover %", "MGRS Tile", "Scene ID", "Platform"
-        ])
-        self.scene_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.scene_table.setSelectionBehavior(QTableWidget.SelectRows)
-        self.scene_table.setSelectionMode(QTableWidget.SingleSelection)
+
+        self.scene_table = SceneTable()
         self.scene_table.itemSelectionChanged.connect(self.on_scene_selected)
-        
+
         results_layout.addWidget(self.scene_table)
         results_group.setLayout(results_layout)
-        
-        log_group = QGroupBox("Processing Log")
-        log_layout = QVBoxLayout()
-        
-        self.log_text = QTextEdit()
-        self.log_text.setReadOnly(True)
-        self.log_text.setMaximumHeight(150)
-        
-        log_layout.addWidget(self.log_text)
-        log_group.setLayout(log_layout)
-        
+
+        self.log_panel = LogPanel()
+
         self.progress_bar = QProgressBar()
         self.progress_bar.setVisible(False)
-        
+
         bottom_layout.addWidget(results_group)
-        bottom_layout.addWidget(log_group)
+        bottom_layout.addWidget(self.log_panel)
         bottom_layout.addWidget(self.progress_bar)
         
         splitter.addWidget(top_widget)
@@ -127,8 +122,7 @@ class Sentinel2GUI(QMainWindow):
         self.log("Application started. Configure search parameters and click 'Search Scenes'.")
         
     def log(self, message):
-        timestamp = datetime.now().strftime("%H:%M:%S")
-        self.log_text.append(f"[{timestamp}] {message}")
+        self.log_panel.log(message)
     
     def search_scenes(self):
         try:
@@ -155,25 +149,10 @@ class Sentinel2GUI(QMainWindow):
     
     def populate_scene_table(self, scenes):
         self.scenes = scenes
-        self.scene_table.setRowCount(len(scenes))
-        
-        for idx, scene in enumerate(scenes):
-            props = scene['properties']
-            
-            self.scene_table.setItem(idx, 0, QTableWidgetItem(str(idx)))
-            self.scene_table.setItem(idx, 1, QTableWidgetItem(props.get('datetime', 'N/A')))
-            self.scene_table.setItem(idx, 2, QTableWidgetItem(f"{props.get('eo:cloud_cover', 0):.1f}"))
-            
-            mgrs = f"{props.get('mgrs:utm_zone', '')}{props.get('mgrs:latitude_band', '')}{props.get('mgrs:grid_square', '')}"
-            self.scene_table.setItem(idx, 3, QTableWidgetItem(mgrs))
-            self.scene_table.setItem(idx, 4, QTableWidgetItem(props.get('sentinel:product_id', 'N/A')))
-            self.scene_table.setItem(idx, 5, QTableWidgetItem(props.get('platform', 'N/A')))
-        
-        if scenes:
-            self.scene_table.selectRow(0)
+        self.scene_table.populate(scenes)
     
     def on_scene_selected(self):
-        if self.scene_table.selectedItems():
+        if self.scene_table.has_selection():
             self.process_btn.setEnabled(True)
     
     def on_search_finished(self, success, message):
@@ -188,11 +167,10 @@ class Sentinel2GUI(QMainWindow):
     
     def process_scene(self):
         try:
-            if not self.scene_table.selectedItems():
+            scene_index = self.scene_table.selected_index()
+            if scene_index is None:
                 QMessageBox.warning(self, "Warning", "Please select a scene to process.")
                 return
-            
-            scene_index = int(self.scene_table.selectedItems()[0].text())
             
             algorithms = self.processing_tab.selected_algorithms()
 
