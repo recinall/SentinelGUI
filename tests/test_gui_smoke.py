@@ -65,6 +65,19 @@ def test_log_format(window):
     assert re.fullmatch(r"\[\d{2}:\d{2}:\d{2}\] hello smoke", lines[-1])
 
 
+def test_view_menu_toggles_theme(app, window):
+    from sentinelgui.ui.theme.tokens import DARK, LIGHT
+
+    assert [a.text() for a in window.menuBar().actions()] == ["View"]
+    action = window.dark_mode_action
+    assert action.isCheckable()
+
+    action.setChecked(True)
+    assert DARK.surface in app.styleSheet()
+    action.setChecked(False)
+    assert LIGHT.surface in app.styleSheet()
+
+
 # -- AOI tab --
 
 

@@ -1,5 +1,4 @@
 import json
-import sys
 from pathlib import Path
 
 from PySide6.QtCore import Qt
@@ -20,6 +19,7 @@ from rasterio.crs import CRS
 
 from sentinelgui.core.models import ProcessingParams
 from sentinelgui.core.processor import Sentinel2COGProcessor
+from sentinelgui.ui import theme
 from sentinelgui.ui.tabs.aoi_tab import AoiTab
 from sentinelgui.ui.tabs.output_tab import OutputTab
 from sentinelgui.ui.tabs.processing_tab import ProcessingTab
@@ -44,7 +44,9 @@ class Sentinel2GUI(QMainWindow):
     def initUI(self):
         self.setWindowTitle("Sentinel-2 COG Processor - Multi-Index Analysis")
         self.setGeometry(100, 100, 1300, 850)
-        
+
+        self._create_menu_bar()
+
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         
@@ -121,9 +123,19 @@ class Sentinel2GUI(QMainWindow):
         
         self.log("Application started. Configure search parameters and click 'Search Scenes'.")
         
+    def _create_menu_bar(self):
+        view_menu = self.menuBar().addMenu("View")
+        self.dark_mode_action = view_menu.addAction("Dark Mode")
+        self.dark_mode_action.setCheckable(True)
+        self.dark_mode_action.setChecked(theme.current_mode() == "dark")
+        self.dark_mode_action.toggled.connect(self.toggle_theme)
+
+    def toggle_theme(self, checked):
+        theme.load_theme(QApplication.instance(), "dark" if checked else "light")
+
     def log(self, message):
         self.log_panel.log(message)
-    
+
     def search_scenes(self):
         try:
             aoi = self.aoi_tab.get_aoi()
@@ -349,17 +361,3 @@ class Sentinel2GUI(QMainWindow):
             )
         else:
             QMessageBox.critical(self, "Error", f"Basemap download failed:\n{message}")
-
-
-def main():
-    app = QApplication(sys.argv)
-    app.setStyle('Fusion')
-    
-    window = Sentinel2GUI()
-    window.show()
-    
-    sys.exit(app.exec())
-
-
-if __name__ == "__main__":
-    main()

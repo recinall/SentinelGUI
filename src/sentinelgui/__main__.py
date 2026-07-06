@@ -1,10 +1,10 @@
 """Entry point: ``python -m sentinelgui`` launches the GUI.
 
-This delegates to :func:`sentinelgui.ui.main_window.main`. As the refactor
-progresses this will grow into the QApplication bootstrap + theme install.
+This delegates to :func:`sentinelgui.app.main`, which builds the ``QApplication``,
+installs the theme, and shows the main window.
 """
 
-from sentinelgui.ui.main_window import main as _gui_main
+from sentinelgui.app import main as _gui_main
 
 
 def main() -> None:
