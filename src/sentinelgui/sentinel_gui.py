@@ -10,61 +10,10 @@ from PySide6.QtCore import Qt, QThread, Signal, QTimer
 from PySide6.QtGui import QFont, QIcon
 import json
 from sentinelgui.sentinel import Sentinel2COGProcessor
-from sentinelgui.core.basemap import BasemapDownloader
+from sentinelgui.workers.basemap import BasemapWorker
 import numpy as np
 import rasterio
 from rasterio.crs import CRS
-
-
-class BasemapThread(QThread):
-    progress = Signal(str)
-    finished = Signal(bool, str, str)
-    
-    def __init__(self, bbox, zoom, source, output_path, reference_profile=None):
-        super().__init__()
-        self.bbox = bbox
-        self.zoom = zoom
-        self.source = source
-        self.output_path = output_path
-        self.reference_profile = reference_profile
-        
-    def run(self):
-        try:
-            self.progress.emit(f"Downloading basemap tiles at zoom level {self.zoom}...")
-            self.progress.emit(f"Source: {self.source.upper()}")
-            
-            if self.reference_profile:
-                self.progress.emit(f"Aligning to reference: {self.reference_profile['width']}x{self.reference_profile['height']} pixels")
-                
-                result, downloaded, failed, total = BasemapDownloader.download_basemap(
-                    self.bbox, 
-                    self.zoom, 
-                    self.source, 
-                    self.output_path,
-                    target_width=self.reference_profile['width'],
-                    target_height=self.reference_profile['height'],
-                    target_transform=self.reference_profile['transform']
-                )
-            else:
-                result, downloaded, failed, total = BasemapDownloader.download_basemap(
-                    self.bbox, 
-                    self.zoom, 
-                    self.source, 
-                    self.output_path
-                )
-            
-            message = f"Downloaded {downloaded}/{total} tiles successfully"
-            if failed > 0:
-                message += f" ({failed} failed)"
-            
-            self.progress.emit(message)
-            self.finished.emit(True, message, self.output_path)
-            
-        except Exception as e:
-            import traceback
-            error_detail = traceback.format_exc()
-            self.progress.emit(f"ERROR: {error_detail}")
-            self.finished.emit(False, str(e), "")
 
 
 class ProcessingThread(QThread):
@@ -885,7 +834,7 @@ class Sentinel2GUI(QMainWindow):
             self.process_btn.setEnabled(False)
             self.basemap_btn.setEnabled(False)
             
-            self.basemap_thread = BasemapThread(bbox, zoom, source, str(output_path), reference_profile)
+            self.basemap_thread = BasemapWorker(bbox, zoom, source, str(output_path), reference_profile)
             self.basemap_thread.progress.connect(self.log)
             self.basemap_thread.finished.connect(self.on_basemap_finished)
             self.basemap_thread.start()
