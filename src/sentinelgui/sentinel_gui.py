@@ -9,7 +9,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
 from PySide6.QtCore import Qt, QThread, Signal, QTimer
 from PySide6.QtGui import QFont, QIcon
 import json
-from sentinelgui.sentinel import Sentinel2COGProcessor
+from sentinelgui.core.processor import Sentinel2COGProcessor
 from sentinelgui.workers.basemap import BasemapWorker
 import numpy as np
 import rasterio

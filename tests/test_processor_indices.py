@@ -21,7 +21,7 @@ No network calls are made anywhere in this file.
 
 import numpy as np
 
-from sentinelgui.sentinel import Sentinel2COGProcessor
+from sentinelgui.core.processor import Sentinel2COGProcessor
 
 DUMMY_AOI = {"bbox": [11.0, 46.0, 11.5, 46.5]}
 DATE_START = "2024-06-01"
