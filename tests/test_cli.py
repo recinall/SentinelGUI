@@ -364,3 +364,14 @@ def test_basemap_reports_failed_tiles(monkeypatch, capsys):
     out = capsys.readouterr().out
     assert out.startswith("Downloading basemap tiles at zoom level 8...\nSource: GOOGLE\n")
     assert out.endswith("Downloaded 3/4 tiles successfully (1 failed)\n")
+
+
+# -- self-check (real rasterio, no mocking: this is the frozen-build smoke test) --
+
+
+def test_self_check_succeeds(capsys):
+    # Exercises the real rasterio/GDAL/PROJ stack in the dev venv; must exit 0.
+    with pytest.raises(SystemExit) as exc:
+        cli.main(["self-check"])
+    assert exc.value.code == 0
+    assert capsys.readouterr().out.startswith("self-check OK")

@@ -252,6 +252,40 @@ def _cmd_basemap(args: argparse.Namespace) -> None:
     print(message)
 
 
+def _cmd_self_check(args: argparse.Namespace) -> None:
+    """Prove GDAL and PROJ data are wired — the smoke test for a frozen build.
+
+    A PyInstaller bundle can import ``rasterio`` yet still fail at runtime when
+    ``GDAL_DATA`` / ``PROJ_DATA`` are missing (see the ``geospatial-packaging`` recipe).
+    This exercises both: a round-trip 1x1 GeoTIFF through an in-memory dataset (GDAL
+    drivers + ``GDAL_DATA``) and an EPSG lookup (needs ``proj.db`` from ``PROJ_DATA``).
+    Exits 0 on success, 1 on any failure, so CI can gate the build on it.
+    """
+    try:
+        from rasterio.crs import CRS
+        from rasterio.io import MemoryFile
+        from rasterio.transform import from_bounds
+
+        transform = from_bounds(0, 0, 1, 1, 1, 1)
+        with MemoryFile() as memfile:
+            with memfile.open(
+                driver="GTiff", height=1, width=1, count=1,
+                dtype="uint8", crs=CRS.from_epsg(4326), transform=transform,
+            ) as dataset:
+                dataset.write(np.zeros((1, 1, 1), dtype="uint8"))
+            with memfile.open() as dataset:
+                _ = dataset.read(1)
+                epsg = dataset.crs.to_epsg()
+        if epsg != 4326:
+            raise RuntimeError(f"CRS round-trip returned EPSG:{epsg}, expected 4326")
+    except Exception as e:  # noqa: BLE001 - report any wiring failure and fail the build
+        print(f"self-check FAILED: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    print(f"self-check OK (GDAL {rasterio.gdal_version()}, PROJ data resolved)")
+    sys.exit(0)
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Build the top-level parser with one subparser per subcommand."""
     parser = argparse.ArgumentParser(
@@ -368,6 +402,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--output", type=str, required=True, help="Output GeoTIFF path for the basemap",
     )
     basemap.set_defaults(func=_cmd_basemap)
+
+    self_check = subparsers.add_parser(
+        "self-check",
+        help="Verify bundled GDAL/PROJ data resolve (smoke test for frozen builds)",
+    )
+    self_check.set_defaults(func=_cmd_self_check)
 
     return parser
 
