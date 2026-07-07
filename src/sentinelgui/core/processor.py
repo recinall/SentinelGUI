@@ -321,15 +321,14 @@ class Sentinel2COGProcessor:
             'interleave': 'band'
         })
 
-        # Only tile when the raster is at least one block in each dimension. A 256-px
-        # tile forced onto a smaller AOI raster produces a padded single-tile GeoTIFF
-        # that some viewers (e.g. GIMP) mis-lay-out into a sheared/"transposed" image.
-        # Falling back to a stripped layout (like the RGB composite) renders correctly.
-        block = 256
-        if data_scaled.shape[0] >= block and data_scaled.shape[1] >= block:
-            profile.update({'tiled': True, 'blockxsize': block, 'blockysize': block})
-        else:
-            profile.update({'tiled': False})
+        # Always write a stripped layout, like the RGB composite and colorized companion.
+        # A tiled GeoTIFF pads its right column and bottom row of tiles to the block size
+        # (256) whenever the raster dimensions are not exact multiples of it — which real
+        # AOIs never are. Proper readers crop that padding, but simpler image viewers
+        # (e.g. the GNOME/eog gdk-pixbuf backend) mis-render the partial edge tiles into a
+        # spurious dark column on the east/south edge. Stripping removes the partial tiles
+        # entirely, so the raw index/band rasters render correctly everywhere.
+        profile.update({'tiled': False})
 
         Path(output_path).parent.mkdir(parents=True, exist_ok=True)
 

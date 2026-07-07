@@ -304,7 +304,7 @@ def test_colorize_index_colormap_choice_differs_by_algorithm():
 # --- save_raster tiling policy ---
 
 
-def test_save_raster_strips_small_rasters_and_tiles_large(tmp_path):
+def test_save_raster_always_writes_stripped(tmp_path):
     import rasterio
 
     processor = make_processor()
@@ -318,21 +318,23 @@ def test_save_raster_strips_small_rasters_and_tiles_large(tmp_path):
         "transform": rasterio.transform.from_origin(654294, 5088566, 10, 10),
     }
 
-    small = np.zeros((114, 148), dtype=np.float32)
-    small_path = tmp_path / "small.tif"
-    processor.save_raster(small, profile, str(small_path), bit_depth=16, scale_range=(-1, 1))
-    with rasterio.open(small_path) as s:
-        # A tile larger than the raster makes GIMP mis-render it; small stays stripped,
-        # so each block spans the full width (strip layout) rather than a 256-px tile.
-        assert s.block_shapes[0][1] == s.width
-        assert s.profile.get("tiled", False) is False
-
-    big = np.zeros((300, 300), dtype=np.float32)
-    big_profile = {**profile, "width": 300, "height": 300}
-    big_path = tmp_path / "big.tif"
-    processor.save_raster(big, big_profile, str(big_path), bit_depth=16, scale_range=(-1, 1))
-    with rasterio.open(big_path) as s:
-        assert s.block_shapes[0] == (256, 256)
+    # Every raster is written stripped (each block spans the full width), never tiled.
+    # A tiled GeoTIFF pads its edge tiles to the block size, and simple image viewers
+    # (e.g. the GNOME/eog gdk-pixbuf backend) mis-render that padding as a spurious edge
+    # column. The small, large-square, and non-multiple-of-256 cases must all be stripped.
+    cases = {
+        "small": (114, 148),  # smaller than a block
+        "big_square": (300, 300),  # larger than a block, exact... but still stripped
+        "edge_tile": (290, 260),  # both >256, neither a multiple of 256 (partial tiles)
+    }
+    for name, (h, w) in cases.items():
+        data = np.zeros((h, w), dtype=np.float32)
+        path = tmp_path / f"{name}.tif"
+        case_profile = {**profile, "width": w, "height": h}
+        processor.save_raster(data, case_profile, str(path), bit_depth=16, scale_range=(-1, 1))
+        with rasterio.open(path) as s:
+            assert s.profile.get("tiled", False) is False, name
+            assert s.block_shapes[0][1] == s.width, name
 
 
 def test_save_reference_profile_round_trips_through_the_basemap_reader(tmp_path):
