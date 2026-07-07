@@ -34,7 +34,8 @@ def test_qss_carries_no_legacy_inline_literals():
 def test_qss_targets_role_and_objectname_hooks():
     sheet = build_qss(LIGHT)
     for selector in ('QPushButton#accent', 'QLabel[role="hint"]',
-                     'QLabel[role="caption"]', 'QCheckBox[role="index"]'):
+                     'QLabel[role="caption"]', 'QCheckBox[role="index"]',
+                     'QSlider::handle:horizontal', 'QGraphicsView'):
         assert selector in sheet
 
 

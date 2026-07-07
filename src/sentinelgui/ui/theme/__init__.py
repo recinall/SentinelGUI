@@ -121,6 +121,32 @@ def build_qss(p: Palette) -> str:
     QMenuBar::item:selected {{ background-color: {p.surface_alt}; }}
     QMenu {{ background-color: {p.surface}; color: {p.on_surface}; border: 1px solid {p.border}; }}
     QMenu::item:selected {{ background-color: {p.primary}; color: {p.on_primary}; }}
+    QSlider::groove:horizontal {{
+        background-color: {p.surface_alt};
+        border: 1px solid {p.border};
+        border-radius: {RADIUS["sm"]}px;
+        height: {SPACE["xs"]}px;
+    }}
+    QSlider::sub-page:horizontal {{
+        background-color: {p.primary};
+        border-radius: {RADIUS["sm"]}px;
+    }}
+    QSlider::handle:horizontal {{
+        background-color: {p.primary};
+        border: 1px solid {p.on_primary};
+        width: {SPACE["md"]}px;
+        margin: -{SPACE["sm"]}px 0;
+        border-radius: {RADIUS["sm"]}px;
+    }}
+    QSlider::handle:horizontal:disabled {{
+        background-color: {p.muted};
+        border-color: {p.surface_alt};
+    }}
+    QGraphicsView {{
+        background-color: {p.surface_alt};
+        border: 1px solid {p.border};
+        border-radius: {RADIUS["sm"]}px;
+    }}
     """
 
 
