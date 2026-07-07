@@ -37,6 +37,10 @@ class ProcessingTab(QScrollArea):
     def __init__(self, parent=None):
         super().__init__(parent)
 
+        # Bands the Save-Individual-Bands toggle currently owns; lets untoggle clear
+        # only what it auto-added and preserve the user's manual extra picks.
+        self._auto_bands: set[str] = set()
+
         widget = QWidget()
         self.setWidget(widget)
         self.setWidgetResizable(True)
@@ -77,6 +81,7 @@ class ProcessingTab(QScrollArea):
             cb_layout = QVBoxLayout()
             cb = QCheckBox(algo_key)
             cb.setProperty("role", "index")
+            cb.toggled.connect(self._resync_if_saving_bands)
 
             desc_label = QLabel(index_descriptions.get(algo_key, ""))
             desc_label.setProperty("role", "caption")
@@ -137,6 +142,14 @@ class ProcessingTab(QScrollArea):
             band_grid.addLayout(col_layout)
 
         bands_layout.addLayout(band_grid)
+
+        band_btns = QHBoxLayout()
+        clear_bands_btn = QPushButton("Clear All Bands")
+        clear_bands_btn.clicked.connect(self.clear_all_bands)
+        band_btns.addWidget(clear_bands_btn)
+        band_btns.addStretch()
+        bands_layout.addLayout(band_btns)
+
         bands_group.setLayout(bands_layout)
 
         ref_band_group = QGroupBox("Reference Band")
@@ -171,6 +184,7 @@ class ProcessingTab(QScrollArea):
 
         self.rgb_cb = QCheckBox("Create RGB Composite (B04, B03, B02)")
         self.rgb_cb.setToolTip("Generate a true color composite image")
+        self.rgb_cb.toggled.connect(self._resync_if_saving_bands)
 
         options_layout.addWidget(self.save_bands_cb)
         options_layout.addWidget(self.save_color_cb)
@@ -183,16 +197,48 @@ class ProcessingTab(QScrollArea):
         layout.addWidget(options_group)
         layout.addStretch()
 
+    def _necessary_bands(self) -> set[str]:
+        """Bands required by the current index/RGB selection (the UI auto-check subset)."""
+        needed: set[str] = set()
+        for algo in self.selected_algorithms():
+            needed.update(Sentinel2COGProcessor.ALGORITHMS[algo]["bands"])
+        if self.rgb():
+            needed.update(["b04", "b03", "b02"])
+        return needed & set(self.band_checkboxes)
+
+    def _resync_auto_bands(self) -> None:
+        """(Re)check exactly the necessary bands, tracking them as auto-owned.
+
+        Only bands the feature previously auto-added are unchecked when they fall out
+        of the necessary set, so a user's manual extra picks survive a resync.
+        """
+        needed = self._necessary_bands()
+        for band in self._auto_bands - needed:
+            self.band_checkboxes[band].setChecked(False)
+        for band in needed:
+            self.band_checkboxes[band].setChecked(True)
+        self._auto_bands = needed
+
+    def _resync_if_saving_bands(self) -> None:
+        if self.save_bands_cb.isChecked():
+            self._resync_auto_bands()
+
     def _on_save_bands_toggled(self, checked: bool):
-        """Mirror the Save-Individual-Bands toggle onto every band checkbox.
+        """Auto-check the bands needed to actually save something, and only those.
 
         The controller only saves bands present in ``bands_to_load``, which it composes
         from the selected indices, :meth:`selected_bands` and the RGB triple. Ticking
         "Save Individual Bands" on its own would otherwise leave that set empty and save
-        nothing, so we (un)check all twelve band checkboxes to match the toggle.
+        nothing, so we auto-check the *necessary* bands (those required by the selected
+        indices plus the RGB triple when the composite is on) rather than all twelve.
+        Untoggling clears only those auto-added bands, preserving manual extra picks.
         """
-        for cb in self.band_checkboxes.values():
-            cb.setChecked(checked)
+        if checked:
+            self._resync_auto_bands()
+        else:
+            for band in self._auto_bands:
+                self.band_checkboxes[band].setChecked(False)
+            self._auto_bands = set()
 
     def select_all_indices(self):
         for cb in self.index_checkboxes.values():
@@ -203,6 +249,12 @@ class ProcessingTab(QScrollArea):
         for cb in self.index_checkboxes.values():
             cb.setChecked(False)
         self.log_requested.emit("Cleared all spectral indices")
+
+    def clear_all_bands(self):
+        for cb in self.band_checkboxes.values():
+            cb.setChecked(False)
+        self._auto_bands = set()
+        self.log_requested.emit("Cleared all band selections")
 
     def selected_algorithms(self) -> list[str]:
         return [key for key, cb in self.index_checkboxes.items() if cb.isChecked()]

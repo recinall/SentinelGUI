@@ -209,17 +209,56 @@ def test_index_checkboxes_and_select_clear(window):
     assert tab.selected_algorithms() == []
 
 
-def test_save_bands_toggle_selects_all_band_checkboxes(window):
-    # Ticking "Save Individual Bands" must auto-check every band so the controller's
-    # bands_to_load is non-empty and the bands actually get saved (regression: Bug 2).
+def test_save_bands_auto_checks_only_necessary_bands(window):
+    # Ticking "Save Individual Bands" must auto-check the NECESSARY bands (those required
+    # by the selected indices + the RGB triple when the composite is on) -- not all 12 --
+    # so bands_to_load is non-empty (Bug 2 stays fixed) without saving every band.
     tab = window.processing_tab
     assert tab.selected_bands() == set()
 
+    tab.index_checkboxes["NDVI"].setChecked(True)
+    tab.rgb_cb.setChecked(True)
     tab.save_bands_cb.setChecked(True)
-    assert all(cb.isChecked() for cb in tab.band_checkboxes.values())
-    assert tab.selected_bands() == set(Sentinel2COGProcessor.BAND_MAPPING)
+
+    ndvi_bands = set(Sentinel2COGProcessor.ALGORITHMS["NDVI"]["bands"])
+    expected = ndvi_bands | {"b04", "b03", "b02"}
+    assert tab.selected_bands() == expected
+    assert tab.selected_bands() != set(Sentinel2COGProcessor.BAND_MAPPING)
+
+    # Live resync: adding an index while save-bands is on extends the checked set.
+    tab.index_checkboxes["NDWI"].setChecked(True)
+    ndwi_bands = set(Sentinel2COGProcessor.ALGORITHMS["NDWI"]["bands"])
+    assert tab.selected_bands() == expected | ndwi_bands
 
     tab.save_bands_cb.setChecked(False)
+    assert not any(cb.isChecked() for cb in tab.band_checkboxes.values())
+    assert tab.selected_bands() == set()
+
+
+def test_save_bands_untoggle_preserves_manual_picks(window):
+    # Untoggling save-bands clears only the auto-added bands, leaving a band the user
+    # ticked by hand (and that no index/RGB needs) still selected.
+    tab = window.processing_tab
+    tab.index_checkboxes["NDVI"].setChecked(True)
+
+    manual = next(b for b in tab.band_checkboxes if b not in tab._necessary_bands())
+    tab.band_checkboxes[manual].setChecked(True)
+
+    tab.save_bands_cb.setChecked(True)
+    assert manual in tab.selected_bands()
+
+    tab.save_bands_cb.setChecked(False)
+    assert tab.selected_bands() == {manual}
+
+
+def test_clear_all_bands_button_wipes_every_checkbox(window):
+    # The Clear-All-Bands escape hatch unchecks every band, auto or manual.
+    tab = window.processing_tab
+    tab.index_checkboxes["NDVI"].setChecked(True)
+    tab.save_bands_cb.setChecked(True)
+    assert tab.selected_bands()
+
+    tab.clear_all_bands()
     assert not any(cb.isChecked() for cb in tab.band_checkboxes.values())
     assert tab.selected_bands() == set()
 
