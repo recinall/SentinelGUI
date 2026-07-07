@@ -94,6 +94,15 @@ def test_view_menu_toggles_theme(app, window):
     assert LIGHT.surface in app.styleSheet()
 
 
+def test_open_results_action_constructs_viewer(window):
+    from sentinelgui.ui.results_viewer import ResultsViewer
+
+    # No scene selected -> falls back to the per-project dir (may not exist); must not raise.
+    window.open_results()
+    assert isinstance(window.results_viewer, ResultsViewer)
+    window.results_viewer.close()
+
+
 # -- AOI tab --
 
 

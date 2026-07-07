@@ -21,6 +21,7 @@ from sentinelgui.core.models import ProcessingParams
 from sentinelgui.core.paths import sanitize_folder_name, scene_datetime_folder
 from sentinelgui.core.processor import Sentinel2COGProcessor
 from sentinelgui.ui import theme
+from sentinelgui.ui.results_viewer import ResultsViewer
 from sentinelgui.ui.tabs.aoi_tab import AoiTab
 from sentinelgui.ui.tabs.output_tab import OutputTab
 from sentinelgui.ui.tabs.processing_tab import ProcessingTab
@@ -41,6 +42,7 @@ class Sentinel2GUI(QMainWindow):
         self.search_thread = None
         self.processing_thread = None
         self.basemap_thread = None
+        self.results_viewer = None
         self.initUI()
         
     def initUI(self):
@@ -143,6 +145,26 @@ class Sentinel2GUI(QMainWindow):
         self.dark_mode_action.setCheckable(True)
         self.dark_mode_action.setChecked(theme.current_mode() == "dark")
         self.dark_mode_action.toggled.connect(self.toggle_theme)
+
+        self.open_results_action = view_menu.addAction("Open Results...")
+        self.open_results_action.triggered.connect(self.open_results)
+
+    def open_results(self):
+        """Open the dedicated results viewer on the selected scene's output folder.
+
+        Falls back to the per-project directory when no scene is selected or its folder
+        does not exist yet; the viewer simply shows no files in that case.
+        """
+        folder = None
+        scene_index = self.scene_table.selected_index()
+        if scene_index is not None:
+            candidate = self._scene_output_dir(scene_index)
+            if candidate.is_dir():
+                folder = candidate
+        if folder is None:
+            folder = self._project_dir()
+        self.results_viewer = ResultsViewer(folder, parent=self)
+        self.results_viewer.show()
 
     def toggle_theme(self, checked):
         theme.load_theme(QApplication.instance(), "dark" if checked else "light")
