@@ -98,14 +98,16 @@ def test_view_menu_toggles_theme(app, window):
 
 
 def test_default_aoi(window):
-    assert window.aoi_tab.get_aoi() == {"bbox": [11.0, 46.0, 11.5, 46.5]}
+    # A small ~0.2 deg box centered on 11.25/46.25, sized to sit inside a single
+    # Sentinel-2 tile (avoids the multi-tile straddle that caused Bug 3).
+    assert window.aoi_tab.get_aoi() == {"bbox": [11.15, 46.15, 11.35, 46.35]}
 
 
 def test_aoi_accepts_dms_in_bbox_field(window):
     # 10°30'00" == 10.5; the other three stay decimal.
     window.aoi_tab.min_lon.setText("10°30'00\"")
     aoi = window.aoi_tab.get_aoi()
-    assert aoi["bbox"] == [10.5, 46.0, 11.5, 46.5]
+    assert aoi["bbox"] == [10.5, 46.15, 11.35, 46.35]
 
 
 def test_aoi_defaults_to_bbox_mode(window):
@@ -123,7 +125,7 @@ def test_switching_to_center_mirrors_default_bbox(window):
     # Round-trips through the UI back to the original AOI.
     min_lon, min_lat, max_lon, max_lat = tab.get_aoi()["bbox"]
     assert [min_lon, min_lat, max_lon, max_lat] == pytest.approx(
-        [11.0, 46.0, 11.5, 46.5]
+        [11.15, 46.15, 11.35, 46.35]
     )
 
 
