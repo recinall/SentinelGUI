@@ -224,6 +224,19 @@ def test_save_bands_toggle_selects_all_band_checkboxes(window):
     assert tab.selected_bands() == set()
 
 
+def test_save_color_checkbox_defaults_off_and_toggles(window):
+    # The colorized _color companion is opt-in (physical-data-only): the checkbox
+    # starts unchecked and simply mirrors into save_color(), with no side effects.
+    tab = window.processing_tab
+    assert tab.save_color() is False
+
+    tab.save_color_cb.setChecked(True)
+    assert tab.save_color() is True
+
+    tab.save_color_cb.setChecked(False)
+    assert tab.save_color() is False
+
+
 # -- Output tab --
 
 

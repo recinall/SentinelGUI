@@ -163,10 +163,17 @@ class ProcessingTab(QScrollArea):
         self.save_bands_cb.setToolTip("Save each band as a separate GeoTIFF file")
         self.save_bands_cb.toggled.connect(self._on_save_bands_toggled)
 
+        self.save_color_cb = QCheckBox("Save colorized index (_color)")
+        self.save_color_cb.setToolTip(
+            "Also write an 8-bit colorized companion (_color.tif) for each index. "
+            "Off by default — the results viewer renders the raw index in color live."
+        )
+
         self.rgb_cb = QCheckBox("Create RGB Composite (B04, B03, B02)")
         self.rgb_cb.setToolTip("Generate a true color composite image")
 
         options_layout.addWidget(self.save_bands_cb)
+        options_layout.addWidget(self.save_color_cb)
         options_layout.addWidget(self.rgb_cb)
         options_group.setLayout(options_layout)
 
@@ -208,6 +215,9 @@ class ProcessingTab(QScrollArea):
 
     def save_bands(self) -> bool:
         return self.save_bands_cb.isChecked()
+
+    def save_color(self) -> bool:
+        return self.save_color_cb.isChecked()
 
     def rgb(self) -> bool:
         return self.rgb_cb.isChecked()

@@ -292,6 +292,7 @@ class Sentinel2GUI(QMainWindow):
                 output=str(output_base),
                 algorithms=algorithms,
                 save_bands=self.processing_tab.save_bands(),
+                save_color=self.processing_tab.save_color(),
                 rgb=self.processing_tab.rgb(),
                 bit_depth=self.output_tab.bit_depth(),
                 ref_band=self.processing_tab.ref_band(),
