@@ -67,6 +67,7 @@ def _make_processor():
     processor.save_raster = fake_save_raster
     processor.calculate_index = fake_calculate_index
     processor.create_rgb_composite = fake_create_rgb_composite
+    processor.save_reference_profile = lambda *a, **k: None
 
     return processor
 
@@ -107,6 +108,9 @@ class FakeProcessor:
 
     def create_rgb_composite(self, bands):
         return np.zeros((3, 3, 4), dtype=np.float32)
+
+    def save_reference_profile(self, profile, output_path):
+        pass
 
 
 class _FakeRasterioDataset:
@@ -176,6 +180,7 @@ def test_process_task_emits_exact_progress_sequence(monkeypatch):
         "  Saved: /tmp/out_ndvi_color.tif",
         "[4/4] Creating RGB composite...",
         "  Saved: /tmp/out_rgb.tif",
+        "  Saved: /tmp/out_reference_profile.json",
     ]
 
     assert summary == "Processing complete! Generated 1 indices, 2 bands, 1 RGB composite"
@@ -251,6 +256,7 @@ def test_process_task_via_worker_emits_exact_progress_sequence(monkeypatch):
         "  Saved: /tmp/out_ndvi_color.tif",
         "[4/4] Creating RGB composite...",
         "  Saved: /tmp/out_rgb.tif",
+        "  Saved: /tmp/out_reference_profile.json",
     ]
 
     assert finished_calls == [
@@ -289,10 +295,15 @@ def test_process_task_via_worker_uses_dataclass_defaults(monkeypatch):
         "[1/2] Loading b04...",
         "  Using b04 as reference (4x3 pixels)",
         "[2/2] Loading b08...",
+        # No indices/RGB/bands to save, but the shared grid is still persisted so a
+        # later basemap download can align to it.
+        "  Saved: /tmp/out_reference_profile.json",
     ]
     assert not any(m.startswith("[") and "Calculating" in m for m in progress_msgs)
     assert not any("Creating RGB composite" in m for m in progress_msgs)
-    assert not any(m.startswith("  Saved:") for m in progress_msgs)
+    assert [m for m in progress_msgs if m.startswith("  Saved:")] == [
+        "  Saved: /tmp/out_reference_profile.json"
+    ]
 
     assert finished_calls == [(True, "Processing complete! Generated 0 indices")]
     assert scene_found_calls == []
@@ -325,6 +336,7 @@ def _make_processor_with_bands(bands):
     )
     processor.save_raster = lambda *a, **k: None
     processor.calculate_index = lambda algorithm, bands: np.zeros((3, 4), dtype=np.float32)
+    processor.save_reference_profile = lambda *a, **k: None
 
     return processor
 

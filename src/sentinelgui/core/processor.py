@@ -12,6 +12,7 @@ errors with ``sys.exit`` exactly as it did in the monolith; a progress callback
 is deliberately left for a later refactor step so behavior stays identical.
 """
 
+import json
 import sys
 from collections.abc import Callable
 from datetime import datetime
@@ -402,6 +403,27 @@ class Sentinel2COGProcessor:
         with rasterio.open(output_path, 'w', **color_profile) as dst:
             dst.write(rgb)
 
+    def save_reference_profile(self, profile: dict, output_path: str) -> None:
+        """Serialize the reference grid to JSON so a later basemap download can align.
+
+        Writes ``width``/``height``/``crs``/``transform`` in exactly the shape the GUI's
+        basemap loader reconstructs (``Affine(*transform[:6])`` + ``CRS.from_string(crs)``),
+        so the downloaded basemap can be resampled onto the identical Sentinel grid and
+        overlays pixel-for-pixel.
+        """
+        crs = profile['crs']
+        data = {
+            'width': int(profile['width']),
+            'height': int(profile['height']),
+            'crs': crs.to_string() if hasattr(crs, 'to_string') else str(crs),
+            'transform': list(profile['transform'])[:6],
+        }
+
+        output_path = str(output_path)
+        Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+        with open(output_path, 'w') as f:
+            json.dump(data, f, indent=2)
+
     def _scene_tile_name(self, scene_index: int) -> str:
         """Human-readable MGRS tile id for a scene (falls back to its index)."""
         props = self.scenes[scene_index].get('properties', {})
@@ -587,6 +609,12 @@ class Sentinel2COGProcessor:
                 dst.write(rgb_8bit)
 
             progress(f"  Saved: {output_path}")
+
+        # Persist the shared grid so a subsequent basemap download can align to it.
+        if reference_profile is not None:
+            profile_path = f"{output}_reference_profile.json"
+            self.save_reference_profile(reference_profile, profile_path)
+            progress(f"  Saved: {profile_path}")
 
         summary = f"Processing complete! Generated {len(algorithms)} indices"
         if save_bands:

@@ -333,3 +333,35 @@ def test_save_raster_strips_small_rasters_and_tiles_large(tmp_path):
     processor.save_raster(big, big_profile, str(big_path), bit_depth=16, scale_range=(-1, 1))
     with rasterio.open(big_path) as s:
         assert s.block_shapes[0] == (256, 256)
+
+
+def test_save_reference_profile_round_trips_through_the_basemap_reader(tmp_path):
+    # The writer must produce exactly what download_basemap reconstructs:
+    # Affine(*transform[:6]) + CRS.from_string(crs).
+    import json
+
+    import rasterio
+    from rasterio.crs import CRS
+    from rasterio.transform import Affine
+
+    processor = Sentinel2COGProcessor(DUMMY_AOI, DATE_START, DATE_END)
+
+    transform = rasterio.transform.from_origin(654294, 5088566, 10, 10)
+    profile = {
+        "driver": "GTiff", "dtype": "float32", "count": 1,
+        "width": 148, "height": 114,
+        "crs": CRS.from_epsg(32632),
+        "transform": transform,
+    }
+
+    out = tmp_path / "sentinel_reference_profile.json"
+    processor.save_reference_profile(profile, str(out))
+
+    with open(out) as f:
+        data = json.load(f)
+
+    # Reconstruct exactly as ui/main_window.download_basemap does.
+    assert data["width"] == 148
+    assert data["height"] == 114
+    assert Affine(*data["transform"][:6]) == transform
+    assert CRS.from_string(data["crs"]) == CRS.from_epsg(32632)
