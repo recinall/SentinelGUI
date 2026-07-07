@@ -133,13 +133,15 @@ class SceneRasters:
     """Known output GeoTIFFs in a scene folder, grouped by how the viewer uses them.
 
     - ``base``: display-ready RGB backdrops (``_rgb.tif``, ``_basemap_*.tif``).
-    - ``overlays``: display-ready RGB overlays (``_color.tif``).
     - ``singles``: single-band rasters (raw ``_{algo}.tif`` indices, ``_band_*.tif``) —
       shown colormapped, and usable as a threshold-able overlay.
+
+    The colorized ``_color.tif`` companions are deliberately NOT collected: the viewer
+    renders the raw single-band index live (colormap + threshold), so it shows only the
+    physical/scientific rasters.
     """
 
     base: list[Path] = field(default_factory=list)
-    overlays: list[Path] = field(default_factory=list)
     singles: list[Path] = field(default_factory=list)
 
 
@@ -165,8 +167,9 @@ def index_name(path) -> str | None:
 def discover_rasters(folder) -> SceneRasters:
     """Scan ``folder`` for the known output ``.tif`` files and group them.
 
-    Pure path logic (no raster reads). Non-``.tif`` files and the
-    ``_reference_profile.json`` sidecar are ignored, as are unrecognized ``.tif`` names.
+    Pure path logic (no raster reads). Non-``.tif`` files, the
+    ``_reference_profile.json`` sidecar, the ``_color.tif`` companions and unrecognized
+    ``.tif`` names are all ignored.
     """
     folder = Path(folder)
     result = SceneRasters()
@@ -177,8 +180,8 @@ def discover_rasters(folder) -> SceneRasters:
     for path in sorted(folder.glob('*.tif')):
         stem = path.stem.lower()
         if stem.endswith('_color'):
-            result.overlays.append(path)
-        elif stem.endswith('_rgb') or '_basemap_' in stem:
+            continue  # colorized companion: not a physical raster, skip
+        if stem.endswith('_rgb') or '_basemap_' in stem:
             result.base.append(path)
         elif '_band_' in stem or any(stem.endswith('_' + algo) for algo in algos):
             result.singles.append(path)

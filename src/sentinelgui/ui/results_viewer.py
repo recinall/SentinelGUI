@@ -162,11 +162,11 @@ class ResultsViewer(QMainWindow):
         self.base_combo.clear()
         self.overlay_combo.clear()
 
-        for path in [*found.base, *found.overlays, *found.singles]:
+        for path in [*found.base, *found.singles]:
             self.base_combo.addItem(path.name, path)
 
         self.overlay_combo.addItem("(none)", None)
-        for path in [*found.overlays, *found.singles]:
+        for path in found.singles:
             self.overlay_combo.addItem(path.name, path)
 
         self.base_combo.blockSignals(False)

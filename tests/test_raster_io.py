@@ -147,10 +147,12 @@ def test_discover_rasters_groups_by_known_names(tmp_path):
 
     assert {p.name for p in found.base} == {
         "sentinel_rgb.tif", "sentinel_basemap_esri_z16.tif"}
-    assert {p.name for p in found.overlays} == {
-        "sentinel_ndvi_color.tif", "sentinel_ndsi_color.tif"}
     assert {p.name for p in found.singles} == {
         "sentinel_ndvi.tif", "sentinel_band_b04.tif"}
+    # _color companions are physical-data-only exclusions: not surfaced anywhere.
+    all_found = {p.name for p in [*found.base, *found.singles]}
+    assert "sentinel_ndvi_color.tif" not in all_found
+    assert "sentinel_ndsi_color.tif" not in all_found
 
 
 def test_discover_rasters_missing_folder_is_empty(tmp_path):

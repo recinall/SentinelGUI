@@ -44,29 +44,34 @@ def test_viewer_populates_combos_from_folder(qapp, tmp_path):
     _make_scene(tmp_path)
     viewer = ResultsViewer(tmp_path)
 
-    # base/map combo lists every viewable file (rgb + color + 2 singles);
-    # overlay adds a "(none)" first entry to (color + 2 singles)
-    assert viewer.base_combo.count() == 4
-    assert viewer.overlay_combo.count() == 4
+    # base/map combo lists every physical file (rgb + 2 singles); the _color
+    # companion is excluded. overlay adds a "(none)" first entry to the 2 singles.
+    assert viewer.base_combo.count() == 3
+    assert viewer.overlay_combo.count() == 3
     assert viewer.overlay_combo.itemData(0) is None
+    # the colorized companion is never offered
+    assert viewer.base_combo.findText("sentinel_ndvi_color.tif") == -1
+    assert viewer.overlay_combo.findText("sentinel_ndvi_color.tif") == -1
     # a base is displayed on load
     assert viewer._base_rgb is not None
     assert not viewer.view.base_item.pixmap().isNull()
     viewer.close()
 
 
-def test_color_overlay_disables_threshold_raw_index_enables_it(qapp, tmp_path):
+def test_single_band_overlay_enables_threshold(qapp, tmp_path):
+    # With _color companions excluded, every overlay option is a single-band raster
+    # (raw index / band) carrying a mask, so threshold + opacity are always available.
     _make_scene(tmp_path)
     viewer = ResultsViewer(tmp_path)
 
-    _select(viewer.overlay_combo, "sentinel_ndvi_color.tif")
+    _select(viewer.overlay_combo, "sentinel_ndvi.tif")
     assert viewer.view.has_overlay()
-    assert not viewer.view.supports_threshold()          # RGB overlay -> no mask
-    assert not viewer.threshold_slider.isEnabled()
+    assert viewer.view.supports_threshold()              # single-band -> mask
+    assert viewer.threshold_slider.isEnabled()
     assert viewer.opacity_slider.isEnabled()
 
-    _select(viewer.overlay_combo, "sentinel_ndvi.tif")
-    assert viewer.view.supports_threshold()              # single-band -> mask
+    _select(viewer.overlay_combo, "sentinel_band_b04.tif")
+    assert viewer.view.supports_threshold()
     assert viewer.threshold_slider.isEnabled()
     viewer.close()
 
@@ -85,7 +90,7 @@ def test_opacity_slider_drives_view(qapp, tmp_path):
 def test_single_map_mode_clears_overlay(qapp, tmp_path):
     _make_scene(tmp_path)
     viewer = ResultsViewer(tmp_path)
-    _select(viewer.overlay_combo, "sentinel_ndvi_color.tif")
+    _select(viewer.overlay_combo, "sentinel_ndvi.tif")
     assert viewer.view.has_overlay()
 
     viewer.single_mode_radio.setChecked(True)
