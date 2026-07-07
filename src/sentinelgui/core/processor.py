@@ -496,6 +496,7 @@ class Sentinel2COGProcessor:
         output = params.output
         algorithms = params.algorithms or []
         save_bands = params.save_bands
+        save_color = params.save_color
         rgb = params.rgb
         bit_depth = params.bit_depth
         ref_band = params.ref_band
@@ -583,9 +584,10 @@ class Sentinel2COGProcessor:
                                  bit_depth=bit_depth, scale_range=(-1, 1))
                 progress(f"  Saved: {output_path}")
 
-                color_path = f"{output}_{algorithm.lower()}_color.tif"
-                self.save_index_color(index_data, reference_profile, color_path, algorithm)
-                progress(f"  Saved: {color_path}")
+                if save_color:
+                    color_path = f"{output}_{algorithm.lower()}_color.tif"
+                    self.save_index_color(index_data, reference_profile, color_path, algorithm)
+                    progress(f"  Saved: {color_path}")
             except Exception as e:
                 progress(f"  Error calculating {algorithm}: {str(e)}")
 

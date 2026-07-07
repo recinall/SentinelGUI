@@ -22,6 +22,7 @@ def test_required_fields_and_defaults():
     # Defaults must equal the worker's old .get() fallbacks.
     assert params.algorithms == []
     assert params.save_bands is False
+    assert params.save_color is False
     assert params.rgb is False
     assert params.bit_depth == 16
     assert params.ref_band is None

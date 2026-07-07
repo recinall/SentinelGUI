@@ -161,6 +161,7 @@ def test_process_task_emits_exact_progress_sequence(monkeypatch):
             output="/tmp/out",
             algorithms=["NDVI"],
             save_bands=True,
+            save_color=True,
             rgb=True,
             bit_depth=16,
             ref_band="b04",
@@ -214,6 +215,30 @@ def test_process_task_reference_profile_only_reported_once():
     assert summary == "Processing complete! Generated 0 indices"
 
 
+def test_process_task_omits_color_companion_when_save_color_off():
+    # save_color defaults to False (physical-data-only): the raw index is written but
+    # the colorized `_color.tif` companion is NOT — no "_color.tif" Saved line fires.
+    processor = _make_processor()
+
+    msgs = []
+    processor.process_scene(
+        ProcessingParams(
+            scene_index=0,
+            bbox=(11.0, 46.0, 11.5, 46.5),
+            bands_to_load={"b04", "b08"},
+            output="/tmp/out",
+            algorithms=["NDVI"],
+            ref_band="b04",
+        ),
+        progress=msgs.append,
+    )
+
+    saved = [m for m in msgs if m.startswith("  Saved:")]
+    assert "  Saved: /tmp/out_ndvi.tif" in saved
+    assert "  Saved: /tmp/out_ndvi_color.tif" not in saved
+    assert not any("_color.tif" in m for m in msgs)
+
+
 def test_process_task_via_worker_emits_exact_progress_sequence(monkeypatch):
     """Freezes the ``ProcessingWorker`` contract: it forwards its ``ProcessingParams``
     straight to ``process_scene`` and re-emits progress/finished unchanged.
@@ -235,6 +260,7 @@ def test_process_task_via_worker_emits_exact_progress_sequence(monkeypatch):
         output="/tmp/out",
         algorithms=["NDVI"],
         save_bands=True,
+        save_color=True,
         rgb=True,
         bit_depth=16,
         ref_band="b04",

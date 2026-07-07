@@ -18,6 +18,7 @@ class ProcessingParams:
     output: str
     algorithms: list[str] = field(default_factory=list)
     save_bands: bool = False
+    save_color: bool = False
     rgb: bool = False
     bit_depth: int = 16
     ref_band: str | None = None
