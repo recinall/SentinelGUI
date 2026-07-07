@@ -1,8 +1,9 @@
 """Output-settings tab.
 
-Owns the output directory + file prefix, the bit-depth selector, and the basemap
-source/zoom controls. Exposes them to the controller through small getters
-(``output_dir``, ``file_prefix``, ``bit_depth``, ``basemap_source``, ``basemap_zoom``);
+Owns the output directory, an optional project/location name, the file prefix, the
+bit-depth selector, and the basemap source/zoom controls. Exposes them to the
+controller through small getters (``output_dir``, ``project_name``, ``file_prefix``,
+``bit_depth``, ``basemap_source``, ``basemap_zoom``);
 the underlying widgets are stored under role-suffixed attribute names so they don't
 shadow the getters. Lifted from the ``create_output_tab`` builder and the
 ``browse_output`` method of the old ``Sentinel2GUI``; defaults and ranges are unchanged.
@@ -45,6 +46,22 @@ class OutputTab(QWidget):
         output_layout.addWidget(self.output_path_edit)
         output_layout.addWidget(output_btn)
         output_group.setLayout(output_layout)
+
+        project_group = QGroupBox("Project / location")
+        project_layout = QVBoxLayout()
+
+        self.project_name_edit = QLineEdit()
+        self.project_name_edit.setPlaceholderText("e.g. Vigneto-Trento (optional)")
+
+        project_info = QLabel(
+            "Groups outputs under a per-project, per-acquisition subfolder. "
+            "Leave empty to use the scene's MGRS tile."
+        )
+        project_info.setProperty("role", "caption")
+
+        project_layout.addWidget(self.project_name_edit)
+        project_layout.addWidget(project_info)
+        project_group.setLayout(project_layout)
 
         prefix_group = QGroupBox("File Prefix")
         prefix_layout = QVBoxLayout()
@@ -110,6 +127,7 @@ class OutputTab(QWidget):
         basemap_group.setLayout(basemap_layout)
 
         layout.addWidget(output_group)
+        layout.addWidget(project_group)
         layout.addWidget(prefix_group)
         layout.addWidget(depth_group)
         layout.addWidget(basemap_group)
@@ -122,6 +140,9 @@ class OutputTab(QWidget):
 
     def output_dir(self) -> str:
         return self.output_path_edit.text()
+
+    def project_name(self) -> str:
+        return self.project_name_edit.text()
 
     def file_prefix(self) -> str:
         return self.file_prefix_edit.text()

@@ -1,3 +1,4 @@
+import contextlib
 import json
 from pathlib import Path
 
@@ -17,6 +18,7 @@ from PySide6.QtWidgets import (
 from rasterio.crs import CRS
 
 from sentinelgui.core.models import ProcessingParams
+from sentinelgui.core.paths import sanitize_folder_name, scene_datetime_folder
 from sentinelgui.core.processor import Sentinel2COGProcessor
 from sentinelgui.ui import theme
 from sentinelgui.ui.tabs.aoi_tab import AoiTab
@@ -196,6 +198,36 @@ class Sentinel2GUI(QMainWindow):
         elif not self.scenes:
             QMessageBox.warning(self, "No Results", "No scenes found matching your criteria.")
     
+    def _scene_mgrs_folder(self, props):
+        tile = (
+            f"{props.get('mgrs:utm_zone', '')}{props.get('mgrs:latitude_band', '')}"
+            f"{props.get('mgrs:grid_square', '')}"
+        )
+        return sanitize_folder_name(tile)
+
+    def _project_dir(self, props=None):
+        """<output_dir>/<project-or-MGRS> — the per-project folder (no date subfolder).
+
+        Uses the typed project name; falls back to the scene's MGRS tile; and if
+        neither is available (e.g. basemap before any scene is picked) stays flat.
+        """
+        base = Path(self.output_tab.output_dir())
+        project = sanitize_folder_name(self.output_tab.project_name())
+        if not project and props:
+            project = self._scene_mgrs_folder(props)
+        return base / project if project else base
+
+    def _scene_output_dir(self, scene_index):
+        """<output_dir>/<project-or-MGRS>/<scene-datetime> for the selected scene."""
+        props = {}
+        if 0 <= scene_index < len(self.scenes):
+            props = self.scenes[scene_index].get("properties", {})
+        out = self._project_dir(props)
+        # No usable acquisition datetime -> skip the date subfolder.
+        with contextlib.suppress(ValueError):
+            out = out / scene_datetime_folder(props.get("datetime", ""))
+        return out
+
     def process_scene(self):
         try:
             scene_index = self.scene_table.selected_index()
@@ -224,7 +256,7 @@ class Sentinel2GUI(QMainWindow):
                     "- RGB composite")
                 return
             
-            output_dir = Path(self.output_tab.output_dir())
+            output_dir = self._scene_output_dir(scene_index)
             output_dir.mkdir(parents=True, exist_ok=True)
 
             output_base = output_dir / self.output_tab.file_prefix()
@@ -290,7 +322,13 @@ class Sentinel2GUI(QMainWindow):
             zoom = self.output_tab.basemap_zoom()
             source = self.output_tab.basemap_source()
 
-            output_dir = Path(self.output_tab.output_dir())
+            # Land the basemap beside the selected scene's outputs (same project/date
+            # folder) so it aligns; if no scene is selected, use the project folder.
+            scene_index = self.scene_table.selected_index()
+            if scene_index is not None:
+                output_dir = self._scene_output_dir(scene_index)
+            else:
+                output_dir = self._project_dir()
             output_dir.mkdir(parents=True, exist_ok=True)
 
             output_path = (
