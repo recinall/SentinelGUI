@@ -311,7 +311,7 @@ _BASEMAP_BBOX = ["--bbox", "11.0", "46.0", "11.5", "46.5"]  # zoom 8 -> a 2x2 gr
 def _patch_basemap(monkeypatch, failing_tile=None):
     """Fake the tile HTTP and the rasterio write so basemap runs offline, no disk."""
 
-    def fake_download_tile(x, y, zoom, source="osm"):
+    def fake_download_tile(x, y, zoom, source="osm", session=None):
         if failing_tile is not None and (x, y) == failing_tile:
             return None
         return Image.new("RGB", (256, 256))

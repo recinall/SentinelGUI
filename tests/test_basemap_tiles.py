@@ -11,7 +11,7 @@ monkeypatched so no real network call ever happens; the real network-hitting
 import rasterio.transform
 from PIL import Image
 
-from sentinelgui.core.basemap import BasemapDownloader
+from sentinelgui.core.basemap import BasemapDownloader, TransientTileError
 
 
 def test_deg2num_known_value_zoom_zero():
@@ -76,7 +76,7 @@ _TOTAL = _COLS * _ROWS
 
 
 def test_download_basemap_grid_math_and_progress(monkeypatch):
-    def fake_download_tile(x, y, zoom, source='osm'):
+    def fake_download_tile(x, y, zoom, source='osm', session=None):
         return Image.new('RGB', (256, 256))
 
     monkeypatch.setattr(BasemapDownloader, "download_tile", fake_download_tile)
@@ -97,7 +97,7 @@ def test_download_basemap_grid_math_and_progress(monkeypatch):
 
 
 def test_download_basemap_aligned_progress(monkeypatch):
-    def fake_download_tile(x, y, zoom, source='osm'):
+    def fake_download_tile(x, y, zoom, source='osm', session=None):
         return Image.new('RGB', (256, 256))
 
     monkeypatch.setattr(BasemapDownloader, "download_tile", fake_download_tile)
@@ -128,7 +128,7 @@ def test_download_basemap_counts_failed_tiles(monkeypatch):
     # x_min, y_min for this bbox/zoom is (135, 90); fail exactly one tile.
     failing_tile = (136, 91)
 
-    def fake_download_tile(x, y, zoom, source='osm'):
+    def fake_download_tile(x, y, zoom, source='osm', session=None):
         if (x, y) == failing_tile:
             return None
         return Image.new('RGB', (256, 256))
@@ -142,3 +142,146 @@ def test_download_basemap_counts_failed_tiles(monkeypatch):
     assert total_tiles == _TOTAL
     assert failed == 1
     assert downloaded == _TOTAL - 1
+
+
+# --- retry / backoff / throttle / sweep, all driven through a faked download_tile
+# with an injected sleep + a zero-jitter rng so no real time or network is used. ---
+
+
+class _ZeroRng:
+    """An rng whose ``uniform`` always returns 0, so backoff delays are exact."""
+
+    def uniform(self, a, b):
+        return 0.0
+
+
+def test_download_basemap_retries_transient_then_succeeds(monkeypatch):
+    # One tile raises a transient error on its first attempt, then succeeds; the
+    # in-loop retry must fill the hole (no failure) and back off exactly once.
+    target = (136, 91)
+    calls = {}
+
+    def fake_download_tile(x, y, zoom, source='osm', session=None):
+        calls[(x, y)] = calls.get((x, y), 0) + 1
+        if (x, y) == target and calls[(x, y)] == 1:
+            raise TransientTileError("simulated transient")
+        return Image.new('RGB', (256, 256))
+
+    monkeypatch.setattr(BasemapDownloader, "download_tile", fake_download_tile)
+
+    sleeps = []
+    _, downloaded, failed, total_tiles = BasemapDownloader.download_basemap(
+        _BBOX, _ZOOM, source='esri',
+        backoff_base=0.5, sleep=sleeps.append, rng=_ZeroRng(),
+    )
+
+    assert failed == 0
+    assert downloaded == _TOTAL
+    assert total_tiles == _TOTAL
+    assert calls[target] == 2  # failed once, retried once, then succeeded
+    # equal-jitter backoff with zero jitter => backoff_base / 2; throttle default 0.
+    assert sleeps == [0.25]
+
+
+def test_download_basemap_honors_retry_after(monkeypatch):
+    # A 429-style transient carrying Retry-After must sleep for exactly that value.
+    target = (135, 90)
+    calls = {}
+
+    def fake_download_tile(x, y, zoom, source='osm', session=None):
+        calls[(x, y)] = calls.get((x, y), 0) + 1
+        if (x, y) == target and calls[(x, y)] == 1:
+            raise TransientTileError("HTTP 429", retry_after=7.0)
+        return Image.new('RGB', (256, 256))
+
+    monkeypatch.setattr(BasemapDownloader, "download_tile", fake_download_tile)
+
+    sleeps = []
+    _, _downloaded, failed, _total = BasemapDownloader.download_basemap(
+        _BBOX, _ZOOM, source='esri', sleep=sleeps.append, rng=_ZeroRng(),
+    )
+
+    assert failed == 0
+    assert sleeps == [7.0]  # Retry-After overrides the computed backoff
+
+
+def test_download_basemap_does_not_retry_permanent_miss(monkeypatch):
+    # A tile that returns None (permanent 404) is never retried and stays failed.
+    target = (136, 91)
+    calls = {}
+
+    def fake_download_tile(x, y, zoom, source='osm', session=None):
+        calls[(x, y)] = calls.get((x, y), 0) + 1
+        if (x, y) == target:
+            return None
+        return Image.new('RGB', (256, 256))
+
+    monkeypatch.setattr(BasemapDownloader, "download_tile", fake_download_tile)
+
+    sleeps = []
+    _, downloaded, failed, _total = BasemapDownloader.download_basemap(
+        _BBOX, _ZOOM, source='esri', sweep=False,
+        sleep=sleeps.append, rng=_ZeroRng(),
+    )
+
+    assert failed == 1
+    assert downloaded == _TOTAL - 1
+    assert calls[target] == 1  # returned None once, never retried
+    assert sleeps == []        # no backoff (permanent), no throttle
+
+
+def test_download_basemap_sweep_recovers_failed_tile(monkeypatch):
+    # A tile fails every attempt of the main pass (1 + retries), then recovers on
+    # the final sweep; the sweep must paste it and emit its progress line.
+    target = (136, 91)
+    calls = {}
+
+    def fake_download_tile(x, y, zoom, source='osm', session=None):
+        calls[(x, y)] = calls.get((x, y), 0) + 1
+        if (x, y) == target and calls[(x, y)] <= 4:  # retries=3 -> 4 main attempts
+            raise TransientTileError("still down")
+        return Image.new('RGB', (256, 256))
+
+    monkeypatch.setattr(BasemapDownloader, "download_tile", fake_download_tile)
+
+    messages = []
+    _, downloaded, failed, _total = BasemapDownloader.download_basemap(
+        _BBOX, _ZOOM, source='esri', retries=3,
+        sleep=lambda _d: None, rng=_ZeroRng(), progress=messages.append,
+    )
+
+    assert failed == 0
+    assert downloaded == _TOTAL
+    assert calls[target] == 5  # 4 failing main attempts + 1 succeeding sweep attempt
+    assert "Retrying 1 failed tiles..." in messages
+
+
+def test_download_basemap_throttles_between_requests(monkeypatch):
+    # A positive throttle sleeps once after every tile; no backoff when all succeed.
+    def fake_download_tile(x, y, zoom, source='osm', session=None):
+        return Image.new('RGB', (256, 256))
+
+    monkeypatch.setattr(BasemapDownloader, "download_tile", fake_download_tile)
+
+    sleeps = []
+    BasemapDownloader.download_basemap(
+        _BBOX, _ZOOM, source='esri',
+        throttle=0.05, sleep=sleeps.append, rng=_ZeroRng(),
+    )
+
+    assert sleeps == [0.05] * _TOTAL
+
+
+def test_download_basemap_default_throttle_is_zero(monkeypatch):
+    # With the default throttle=0 the happy path never sleeps (speed unchanged).
+    def fake_download_tile(x, y, zoom, source='osm', session=None):
+        return Image.new('RGB', (256, 256))
+
+    monkeypatch.setattr(BasemapDownloader, "download_tile", fake_download_tile)
+
+    sleeps = []
+    BasemapDownloader.download_basemap(
+        _BBOX, _ZOOM, source='esri', sleep=sleeps.append,
+    )
+
+    assert sleeps == []
