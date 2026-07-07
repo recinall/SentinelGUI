@@ -65,3 +65,19 @@ ALGORITHMS = {
     'IISV': {'bands': ['b03', 'b04', 'b05', 'b08', 'b11'],
              'formula': lambda g, r, re, n, s: None},
 }
+
+# Vegetation/water indices that read best on a red-yellow-green ramp; everything else
+# uses a diverging red-yellow-blue ramp. Kept in sync with the choice hard-coded in
+# ``Sentinel2COGProcessor.colorize_index`` (the raster writer) so the on-disk ``_color``
+# companion and the results viewer's live colormap agree.
+GRADIENT_INDICES = {'NDVI', 'NDWI', 'SAVI', 'EVI', 'NDRE', 'GNDVI', 'IISV'}
+
+
+def index_colormap(algorithm: str) -> str:
+    """Return the matplotlib colormap name used to display a spectral index.
+
+    ``RdYlGn`` for the vegetation/water indices in :data:`GRADIENT_INDICES`, ``RdYlBu_r``
+    for the rest. Unknown or empty names fall back to ``RdYlBu_r``. Mirrors the colormap
+    choice in ``Sentinel2COGProcessor.colorize_index``.
+    """
+    return 'RdYlGn' if algorithm in GRADIENT_INDICES else 'RdYlBu_r'
