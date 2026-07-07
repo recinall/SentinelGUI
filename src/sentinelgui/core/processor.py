@@ -28,7 +28,7 @@ from rasterio.warp import (
     reproject,
     transform_bounds,
 )
-from shapely.geometry import shape
+from shapely.geometry import box, shape
 
 from sentinelgui.core.indices import ALGORITHMS, BAND_MAPPING, BAND_RESOLUTION
 from sentinelgui.core.models import ProcessingParams
@@ -402,6 +402,71 @@ class Sentinel2COGProcessor:
         with rasterio.open(output_path, 'w', **color_profile) as dst:
             dst.write(rgb)
 
+    def _scene_tile_name(self, scene_index: int) -> str:
+        """Human-readable MGRS tile id for a scene (falls back to its index)."""
+        props = self.scenes[scene_index].get('properties', {})
+        tile = (f"{props.get('mgrs:utm_zone', '')}{props.get('mgrs:latitude_band', '')}"
+                f"{props.get('mgrs:grid_square', '')}")
+        return tile or f"scene {scene_index}"
+
+    def _select_mosaic_tiles(self, scene_index: int,
+                             bbox: tuple[float, float, float, float]
+                             ) -> tuple[list[int], float | None]:
+        """Pick the selected scene plus same-acquisition sibling tiles that fill the AOI.
+
+        A single Sentinel-2 tile may cover only part of the AOI when the AOI straddles
+        a tile boundary; the STAC search returns the neighbouring tiles from the same
+        acquisition too. This gathers the selected scene plus every same-day sibling
+        whose footprint adds *new* AOI coverage, so the bands can be mosaicked into a
+        full frame instead of a nodata strip.
+
+        Returns ``(scene_indices, coverage_fraction)``. ``coverage_fraction`` is the
+        fraction of the AOI area covered by the chosen tiles' footprints, or ``None``
+        when it cannot be computed (no scenes/geometry loaded) — in which case only the
+        selected scene is used, so the single-tile behaviour is unchanged.
+        """
+        if not self.scenes or scene_index >= len(self.scenes):
+            return [scene_index], None
+
+        selected = self.scenes[scene_index]
+        sel_date = selected.get('properties', {}).get('datetime', '')[:10]
+        if not sel_date or selected.get('geometry') is None:
+            return [scene_index], None
+
+        aoi_poly = box(*bbox)
+        if aoi_poly.area == 0:
+            return [scene_index], None
+
+        # Candidates: the selected scene first, then same-day siblings intersecting the AOI.
+        candidates = [scene_index]
+        for i, scene in enumerate(self.scenes):
+            if i == scene_index:
+                continue
+            props = scene.get('properties', {})
+            if props.get('datetime', '')[:10] != sel_date or scene.get('geometry') is None:
+                continue
+            try:
+                if shape(scene['geometry']).intersects(aoi_poly):
+                    candidates.append(i)
+            except Exception:
+                continue
+
+        # Greedily keep the selected scene, then only siblings that add coverage.
+        chosen: list[int] = []
+        covered = None
+        for idx in candidates:
+            try:
+                inter = shape(self.scenes[idx]['geometry']).intersection(aoi_poly)
+            except Exception:
+                continue
+            new_area = inter.area if covered is None else inter.difference(covered).area
+            if idx == scene_index or new_area > 1e-9:
+                chosen.append(idx)
+                covered = inter if covered is None else covered.union(inter)
+
+        coverage = covered.area / aoi_poly.area if covered is not None else None
+        return chosen, coverage
+
     def process_scene(self, params: ProcessingParams,
                       progress: Callable[[str], None] = lambda _: None) -> str:
         scene_index = params.scene_index
@@ -415,7 +480,23 @@ class Sentinel2COGProcessor:
         ref_band = params.ref_band
 
         progress(f"Processing scene {scene_index}...")
-        band_urls = self.get_scene_assets(scene_index)
+
+        scene_indices, coverage = self._select_mosaic_tiles(scene_index, bbox)
+
+        # Per band, the list of contributing tile URLs (one per mosaic scene that has it).
+        band_urls: dict[str, list[str]] = {}
+        for idx in scene_indices:
+            for band, url in self.get_scene_assets(idx).items():
+                band_urls.setdefault(band, []).append(url)
+
+        if len(scene_indices) > 1:
+            tiles = ", ".join(self._scene_tile_name(i) for i in scene_indices)
+            progress(f"Mosaicking {len(scene_indices)} tiles: {tiles}")
+        if coverage is not None and coverage < 0.999:
+            progress(
+                f"Warning: available imagery covers only {coverage * 100:.0f}% of the "
+                f"AOI; the remaining area will be empty (nodata)."
+            )
 
         loaded_bands = {}
         reference_profile = None
@@ -436,24 +517,33 @@ class Sentinel2COGProcessor:
         current_step = 0
 
         for band in bands_order:
-            if band not in band_urls:
+            urls = band_urls.get(band, [])
+            if not urls:
                 progress(f"Warning: Band {band} not available")
                 continue
 
             current_step += 1
             progress(f"[{current_step}/{total_steps}] Loading {band}...")
 
-            data, band_profile = self.load_band_window(
-                band_urls[band],
-                bbox,
-                reference_profile=reference_profile
-            )
+            # Reproject each contributing tile onto the reference grid and fill-merge
+            # (keep already-valid pixels, fill nodata=0 from the next tile).
+            data = None
+            for url in urls:
+                tile_data, tile_profile = self.load_band_window(
+                    url, bbox, reference_profile=reference_profile
+                )
+                if reference_profile is None:
+                    reference_profile = tile_profile
+                    progress(
+                        f"  Using {band} as reference "
+                        f"({tile_data.shape[1]}x{tile_data.shape[0]} pixels)"
+                    )
+                data = tile_data if data is None else np.where(data == 0, tile_data, data)
+
+            if len(urls) > 1:
+                progress(f"  Mosaicked {len(urls)} tiles for {band}")
 
             loaded_bands[band] = data
-
-            if reference_profile is None:
-                reference_profile = band_profile
-                progress(f"  Using {band} as reference ({data.shape[1]}x{data.shape[0]} pixels)")
 
             if save_bands:
                 output_path = f"{output}_band_{band}.tif"
