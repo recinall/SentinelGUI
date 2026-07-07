@@ -1,6 +1,6 @@
 [project]
 name = "sentinelgui"
-version = "0.1.2"
+version = "0.1.3"
 description = "Desktop GUI for searching and processing Sentinel-2 COG imagery."
 readme = "README.md"
 requires-python = ">=3.12"          # rasterio 1.5+ requires >=3.12
